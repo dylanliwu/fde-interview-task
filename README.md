@@ -33,7 +33,7 @@ Two artifacts:
 
 **Use whatever AI tools you want** — Claude, Cursor, Copilot, whatever your normal workflow is. We expect it. The follow-up call is a discussion about your decisions and process, not a fresh problem; bring strong opinions on what you reached for AI for and what you chose to write yourself.
 
-Time budget: open-ended, but most candidates spend 4–6 hours of focused work. Spending 20 doesn't help your odds — clarity beats completeness.
+Time budget: open-ended. Spending 20 doesn't help your odds — clarity beats completeness.
 
 ## Run
 
