@@ -1,32 +1,28 @@
 <script lang="ts">
-	import type { Line, Vendor } from '$lib/types';
-	import { FIELD_DEFS } from '$lib/fields';
+	import type { Line, Product, Vendor } from '$lib/types';
+	import { HEADER_FIELD_DEFS, LINE_FIELD_DEFS, PRODUCT_FIELD_DEFS } from '$lib/fields';
 	import { store } from '$lib/store.svelte';
 	import { ClipboardList } from '@lucide/svelte';
 	import FieldInput from './FieldInput.svelte';
 
-	type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock' | 'discontinued';
+	type StockStatus = 'in_stock' | 'low_stock';
 	type PartStatus = { partNumber: string; stockStatus: StockStatus; lastQuoted: string };
 
 	const STATUS_LABEL: Record<StockStatus, string> = {
 		in_stock: 'In stock',
-		low_stock: 'Low stock',
-		out_of_stock: 'Out of stock',
-		discontinued: 'Discontinued'
+		low_stock: 'Low stock'
 	};
 
 	const STATUS_CLASS: Record<StockStatus, string> = {
 		in_stock: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-		low_stock: 'border-amber-200 bg-amber-50 text-amber-700',
-		out_of_stock: 'border-rose-200 bg-rose-50 text-rose-700',
-		discontinued: 'border-gray-200 bg-gray-50 text-gray-600'
+		low_stock: 'border-amber-200 bg-amber-50 text-amber-700'
 	};
 
 	let { vendor }: { vendor: Vendor } = $props();
 
 	const totalLines = $derived(vendor.products.reduce((s, p) => s + p.lines.length, 0));
 	const pricedLines = $derived(
-		vendor.products.reduce((s, p) => s + p.lines.filter((l) => l.priceBreaks !== null).length, 0)
+		vendor.products.reduce((s, p) => s + p.lines.filter((l) => l.price !== null).length, 0)
 	);
 
 	let partStatuses = $state<Record<string, PartStatus>>({});
@@ -53,6 +49,18 @@
 	function updateLine(productId: string, lineId: string, patch: Partial<Line>) {
 		store.updateLine(vendor.id, productId, lineId, patch);
 	}
+
+	function updateVendor(patch: Partial<Vendor>) {
+		store.updateVendor(vendor.id, patch);
+	}
+
+	function updateProduct(productId: string, patch: Partial<Product>) {
+		store.updateProduct(vendor.id, productId, patch);
+	}
+
+	function scalarValue(value: unknown): string | number | boolean | null | undefined {
+		return value as string | number | boolean | null | undefined;
+	}
 </script>
 
 <section
@@ -74,6 +82,26 @@
 	</header>
 
 	<div class="flex-1 space-y-6 overflow-y-auto bg-gray-50/40 p-5">
+		<section class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+			<header class="border-b border-gray-100 bg-gray-50/60 px-4 py-3">
+				<h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Quote header</h3>
+			</header>
+			<div class="grid gap-3 px-4 py-4 sm:grid-cols-2">
+				{#each HEADER_FIELD_DEFS as def (def.field)}
+					<div class={def.type === 'textarea' ? 'sm:col-span-2' : ''}>
+						<FieldInput
+							{def}
+							value={scalarValue(vendor[def.field])}
+							onChange={(value) =>
+								updateVendor({
+									[def.field]: value
+								} as Partial<Vendor>)}
+						/>
+					</div>
+				{/each}
+			</div>
+		</section>
+
 		{#each vendor.products as product, productIdx (product.id)}
 			{@const status = partStatuses[product.partNumber]}
 			<article class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -111,6 +139,26 @@
 				</header>
 
 				<div class="divide-y divide-gray-100">
+					<section class="px-4 py-4">
+						<h4 class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+							Product fields
+						</h4>
+						<div class="grid gap-3 sm:grid-cols-2">
+							{#each PRODUCT_FIELD_DEFS as def (def.field)}
+								<div class={def.type === 'textarea' ? 'sm:col-span-2' : ''}>
+									<FieldInput
+										{def}
+										value={scalarValue(product[def.field])}
+										onChange={(value) =>
+											updateProduct(product.id, {
+												[def.field]: value
+											} as Partial<Product>)}
+									/>
+								</div>
+							{/each}
+						</div>
+					</section>
+
 					{#each product.lines as line, lineIdx (line.id)}
 						<div class="px-4 py-5">
 							<div class="mb-5 flex items-center gap-2">
@@ -127,10 +175,10 @@
 							</div>
 
 							<div class="space-y-3">
-								{#each FIELD_DEFS as def (def.field)}
+								{#each LINE_FIELD_DEFS as def (def.field)}
 									<FieldInput
 										{def}
-										value={line[def.field]}
+										value={scalarValue(line[def.field])}
 										onChange={(value) =>
 											updateLine(product.id, line.id, {
 												[def.field]: value

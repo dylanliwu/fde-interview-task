@@ -12,7 +12,7 @@
 
 	function lineCounts(vendor: Vendor) {
 		const lines = vendor.products.flatMap((p) => p.lines);
-		const priced = lines.filter((l) => l.priceBreaks !== null).length;
+		const priced = lines.filter((l) => l.price !== null).length;
 		return { priced, total: lines.length };
 	}
 
@@ -47,7 +47,7 @@
 				<div class="flex-1">
 					<h1 class="text-2xl font-semibold tracking-tight text-gray-900">Quote Inbox</h1>
 					<p class="mt-1 text-sm text-gray-500">
-						2 vendor responses awaiting processing · due May 20
+						{vendors.length} vendor responses awaiting processing · due May 20
 					</p>
 				</div>
 			</div>

@@ -1,16 +1,22 @@
 import { json, error } from '@sveltejs/kit';
 import { loadState, saveState } from '$lib/server/persistence';
-import { FIELD_DEFS } from '$lib/fields';
+import { HEADER_FIELD_DEFS, LINE_FIELD_DEFS, PRODUCT_FIELD_DEFS } from '$lib/fields';
 import type { Vendor } from '$lib/types';
 import type { RequestHandler } from './$types';
 
-const REQUIRED_FIELDS = FIELD_DEFS.filter((f) => f.required).map((f) => f.field);
-
 function countMissingRequired(vendor: Vendor): number {
 	let count = 0;
+	for (const field of HEADER_FIELD_DEFS.filter((f) => f.required).map((f) => f.field)) {
+		const value = vendor[field];
+		if (value === null || value === '' || value === undefined) count++;
+	}
 	for (const product of vendor.products) {
+		for (const field of PRODUCT_FIELD_DEFS.filter((f) => f.required).map((f) => f.field)) {
+			const value = product[field];
+			if (value === null || value === '' || value === undefined) count++;
+		}
 		for (const line of product.lines) {
-			for (const field of REQUIRED_FIELDS) {
+			for (const field of LINE_FIELD_DEFS.filter((f) => f.required).map((f) => f.field)) {
 				const value = line[field];
 				if (value === null || value === '' || value === undefined) count++;
 			}

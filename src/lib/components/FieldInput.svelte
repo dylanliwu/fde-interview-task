@@ -1,12 +1,13 @@
 <script lang="ts">
-	import type { Line } from '$lib/types';
 	import type { FieldDef } from '$lib/fields';
 	import { Check, ChevronDown } from '@lucide/svelte';
 
+	type FieldValue = string | number | boolean | null | undefined;
+
 	type Props = {
-		def: FieldDef;
-		value: Line[FieldDef['field']];
-		onChange: (value: Line[FieldDef['field']]) => void;
+		def: FieldDef<any>;
+		value: FieldValue;
+		onChange: (value: Exclude<FieldValue, undefined>) => void;
 	};
 
 	let { def, value, onChange }: Props = $props();

@@ -1,4 +1,4 @@
-import type { AppState, Line } from './types';
+import type { AppState, Line, Product, Vendor } from './types';
 
 const SAVE_DEBOUNCE_MS = 350;
 
@@ -45,6 +45,20 @@ function createStore() {
 		},
 		getVendor(id: string) {
 			return state.vendors.find((v) => v.id === id);
+		},
+		updateVendor(vendorId: string, patch: Partial<Vendor>) {
+			const idx = state.vendors.findIndex((v) => v.id === vendorId);
+			if (idx === -1) return;
+			state.vendors[idx] = { ...state.vendors[idx], ...patch };
+			scheduleSave();
+		},
+		updateProduct(vendorId: string, productId: string, patch: Partial<Product>) {
+			const vendor = state.vendors.find((v) => v.id === vendorId);
+			if (!vendor) return;
+			const idx = vendor.products.findIndex((p) => p.id === productId);
+			if (idx === -1) return;
+			vendor.products[idx] = { ...vendor.products[idx], ...patch };
+			scheduleSave();
 		},
 		updateLine(vendorId: string, productId: string, lineId: string, patch: Partial<Line>) {
 			const vendor = state.vendors.find((v) => v.id === vendorId);

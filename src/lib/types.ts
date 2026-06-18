@@ -3,10 +3,12 @@ export type Line = {
 	quantity: number;
 
 	isQuoting: boolean | null;
-	priceBreaks: number | null;
+	isFat: boolean | null;
+	unitCost: number | null;
+	variance: string;
+	price: number | null;
+	currency: 'USD' | 'EUR' | 'GBP' | '';
 	leadTime: number | null;
-	dealerOrManufacturer: 'Dealer' | 'Manufacturer' | '';
-	waiveFat: boolean | null;
 	additionalNotes: string;
 };
 
@@ -15,6 +17,15 @@ export type Product = {
 	partNumber: string;
 	nsn: string;
 	description: string;
+	packagingIncluded: boolean | null;
+	certifications: string;
+	nreCost: number | null;
+	coo: string;
+	hazmatItem: boolean | null;
+	mfrCage: string;
+	mfrPartNumber: string;
+	shippingIncluded: boolean | null;
+	additionalNotes: string;
 	lines: Line[];
 };
 
@@ -41,6 +52,11 @@ export type Vendor = {
 	contactName: string;
 	contactEmail: string;
 	cage: string;
+	paymentTerms: string;
+	daysQuoteValid: number | null;
+	vendorContact: string;
+	additionalNotes: string;
+	followUpDraft: string;
 	submittedAt: string | null;
 	emails: Email[];
 	products: Product[];

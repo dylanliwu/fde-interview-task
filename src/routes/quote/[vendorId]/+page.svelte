@@ -184,7 +184,7 @@
 
 	{#if vendor}
 		<main
-			class="grid flex-1 grid-cols-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
+			class="grid flex-1 grid-cols-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,7fr)_minmax(360px,5fr)]"
 		>
 			<EmailCorrespondence {vendor} />
 			<VendorProcessingForm {vendor} />

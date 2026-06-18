@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-const STATUSES = ['in_stock', 'low_stock', 'out_of_stock', 'discontinued'] as const;
+const STATUSES = ['in_stock', 'low_stock'] as const;
 
 function statusFor(partNumber: string): (typeof STATUSES)[number] {
 	let h = 0;

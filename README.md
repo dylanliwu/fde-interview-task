@@ -7,12 +7,13 @@ A form for processing vendor RFQ responses, in two routes:
 
 ## What's in the seed
 
-Two vendor responses to one open RFQ for 10 parts at 3 quantity tiers each (30 lines per vendor):
+Three vendor responses to one open RFQ for 10 requested parts with uneven requested quantity breaks:
 
-- **Heritage Aero Supply** — replies inline in email with all pricing.
-- **Apex Components LLC** — replies with a PDF quote attachment.
+- **Heritage Aero Supply** — replies inline, quotes one alternate PN, omits one requested part, skips a requested price break, and adds an unrequested part.
+- **Apex Components LLC** — replies with a PDF quote attachment, quotes one alternate, omits one requested part, supplies different breaks than requested, and adds a related stock line.
+- **Northstar Surplus & MRO** — replies through a messy forwarded chain with an obsolete nested revision, a surplus alternate, a no-bid item, and an extra lot item.
 
-Each vendor has 6 fields per line. About 67% of values come pre-filled.
+Each vendor has fields at the quote header, product, and line levels. Some values come pre-filled, some are intentionally missing, the number of quantity lines varies by product, and the correspondence pane includes an intentionally incomplete follow-up draft that asks for a mix of missing, clarifying, and already-supplied information.
 
 ## Submit
 
@@ -22,7 +23,7 @@ When a vendor's processing is done, hit **Submit** in the detail header. That `P
 
 Make this better.
 
-The shape of `Line` in `src/lib/types.ts` is fixed. The persistence contract — `data/state.json` and `PUT /api/state` — is fixed. Everything else is yours: layout, components, libraries, routing, styling, API design beyond the two fixed pieces above.
+The persistence contract — `data/state.json` and `PUT /api/state` — is fixed. Everything else is yours: layout, components, libraries, routing, styling, API design beyond the fixed persistence surface, and how you represent the extraction workflow.
 
 ## How we evaluate this
 
@@ -59,8 +60,8 @@ src/
 ├── app.css, app.html
 ├── lib/
 │   ├── types.ts                — Vendor, Product, Line, Email, AppState
-│   ├── fields.ts               — FieldDef, FIELD_DEFS, makeEmptyLine
-│   ├── seed.ts                 — 2 vendors, 10 parts × 3 tiers
+│   ├── fields.ts               — field metadata + makeEmptyLine
+│   ├── seed.ts                 — 3 vendors, 10 parts, uneven quantity breaks
 │   ├── avatar.ts               — deterministic avatar colors / initials
 │   ├── store.svelte.ts         — reactive store + debounced PUT /api/state, submit
 │   ├── server/persistence.ts   — JSON file read/write (data/state.json)
@@ -86,7 +87,7 @@ src/
 
 ## Data model
 
-`Vendor → Product[] → Line[]`. A `Line` is one (part, qty) pair and owns every form field. Field metadata lives in `FIELD_DEFS`. Adding a field = add to `Line` + `FIELD_DEFS`, and it renders automatically.
+`Vendor -> Product[] -> Line[]`. Header-level fields live on `Vendor`, product-level fields live on `Product`, and quote-break fields live on `Line`. Field metadata lives in `HEADER_FIELD_DEFS`, `PRODUCT_FIELD_DEFS`, and `LINE_FIELD_DEFS`.
 
 ## Persistence
 
