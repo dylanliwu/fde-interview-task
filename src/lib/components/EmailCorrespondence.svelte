@@ -24,8 +24,6 @@
 		} catch {}
 	}
 
-	const draftPreview = $derived(vendor.followUpDraft.replace(/\s+/g, ' ').trim());
-
 	function generateDraft() {
 		updateDraft(draftFollowUp(vendor, buildReview(vendor)));
 		setDraftOpen(true);
@@ -78,9 +76,6 @@
 				<h3 class="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500">
 					Reply draft
 				</h3>
-				{#if !draftOpen}
-					<span class="min-w-0 truncate text-xs text-gray-400">{draftPreview || 'Empty'}</span>
-				{/if}
 			</button>
 			<button
 				type="button"
