@@ -21,7 +21,8 @@
 		type Tone
 	} from '$lib/review';
 	import { findInRequest, findInVendor, focusSource } from '$lib/source.svelte';
-	import { Check, ChevronRight, Plus, CheckCheck, Info, X, Menu, Minus, Palette } from '@lucide/svelte';
+	import { Check, ChevronRight, Plus, Info, X, Menu, Minus, Palette, ArrowLeftRight } from '@lucide/svelte';
+	import { layout, toggleSwapped } from '$lib/layout.svelte';
 	import CompactField from './CompactField.svelte';
 
 	let { vendor }: { vendor: Vendor } = $props();
@@ -202,11 +203,6 @@
 		store.setReviewed(vendor.id, visibleRows.map((x) => x.r.key), !allConfirmed);
 	}
 
-	function confirmAllMatches() {
-		const keys = groups.flatMap((g) => g.rows.filter((r) => r.status === 'ok').map((r) => r.key));
-		store.setReviewed(vendor.id, keys, true);
-		menuOpen = false;
-	}
 
 	function updateLine(productId: string, lineId: string, patch: Partial<Line>) {
 		store.updateLine(vendor.id, productId, lineId, patch);
@@ -432,11 +428,16 @@
 					type="button"
 					role="menuitem"
 					class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-800 hover:bg-gray-100"
-					onclick={confirmAllMatches}
+					onclick={() => {
+						toggleSwapped();
+						menuOpen = false;
+					}}
 				>
-					<CheckCheck class="h-4 w-4 text-emerald-500" />
-					<span class="flex-1">Confirm all matches</span>
+					<ArrowLeftRight class="h-4 w-4 text-gray-500" />
+					<span class="flex-1">Swap sides</span>
+					<span class="text-[11px] text-gray-500">{layout.swapped ? 'Table left' : 'Table right'}</span>
 				</button>
+				<div class="my-1 h-px bg-gray-200"></div>
 				<button
 					type="button"
 					role="menuitemcheckbox"
@@ -739,7 +740,7 @@
 									<td class="px-2 py-1 text-right font-mono tabular-nums text-gray-900">{r.qty ?? '—'}</td>
 									<td colspan={LINE_COLS.length - QTY_IDX - 1} class="px-2 py-1 text-xs text-gray-500">
 										<div class="flex items-center gap-2">
-											<span class="truncate italic">{@render issueText(r.issues[0], g)}</span>
+											<span class="text-gray-400">—</span>
 											{#if r.status === 'missing_break' && g.product && r.qty !== null}
 												{@const qty = r.qty}
 												<button
@@ -757,7 +758,7 @@
 									</td>
 								{/if}
 							</tr>
-							{#if line && selected && r.issues.length}
+							{#if selected && r.issues.length}
 								<tr class="text-[11px] {colors ? tone.row : ''}">
 									<td class={colors ? tone.bar : ''}></td>
 									<td colspan={COLSPAN - 1} class="px-2 pb-1.5 text-gray-700">
