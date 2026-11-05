@@ -387,6 +387,9 @@
 			{:else}
 				<span class="font-semibold tabular-nums text-gray-900">{todoCount}</span> of {summary.total} left to confirm
 			{/if}
+			<span class="text-gray-400"> · </span>
+			<span class="tabular-nums">{vendor.products.length} parts</span>
+			<span class="text-gray-500">({summary.partsQuoted}/{summary.partsRequested} requested quoted)</span>
 		</p>
 
 		<button
