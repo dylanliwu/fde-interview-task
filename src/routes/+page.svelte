@@ -102,10 +102,6 @@
 										class="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700"
 									>
 										{vendor.products.length} products
-										<span class="text-gray-300">·</span>
-										{counts.lines} lines
-										<span class="text-gray-300">·</span>
-										{counts.priced}/{counts.lines} priced
 									</span>
 
 									<span

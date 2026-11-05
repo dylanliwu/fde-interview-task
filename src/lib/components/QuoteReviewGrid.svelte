@@ -26,7 +26,10 @@
 	let { vendor }: { vendor: Vendor } = $props();
 
 	// --- schema-driven columns: every non-textarea line field is a column ---
-	const LINE_COLS = LINE_FIELD_DEFS.filter((d) => d.type !== 'textarea');
+	// isQuoting is hidden: a row only exists because the vendor quoted it, and the "Not quoted"
+	// status already covers no-bids, so the checkbox was noise. The data is kept untouched.
+	const HIDDEN_COLS = new Set<keyof Line>(['isQuoting']);
+	const LINE_COLS = LINE_FIELD_DEFS.filter((d) => d.type !== 'textarea' && !HIDDEN_COLS.has(d.field));
 	const LINE_NOTE_DEFS = LINE_FIELD_DEFS.filter((d) => d.type === 'textarea');
 	const QTY_IDX = LINE_COLS.findIndex((d) => d.field === 'quantity');
 	const COLSPAN = 2 + LINE_COLS.length;
@@ -53,7 +56,10 @@
 
 	type Filter = 'all' | 'attention' | 'unconfirmed';
 	let filter = $state<Filter>('all');
+	/** Cursor row (drives source highlight) + multi-selection (shift = range, ctrl/cmd = toggle). */
 	let selectedKey = $state<string | null>(null);
+	let selection = $state(new Set<string>());
+	let anchorKey: string | null = null;
 	let expanded = $state(new Set<string>());
 
 	// --- colour coding toggle (per-viewer preference) ---
@@ -114,10 +120,6 @@
 	const groups = $derived(buildReview(vendor));
 	const reviewed = $derived(new Set(vendor.reviewedRows ?? []));
 	const summary = $derived(summarize(groups, vendor.reviewedRows ?? []));
-	const lineCount = $derived(vendor.products.reduce((s, p) => s + p.lines.length, 0));
-	const pricedCount = $derived(
-		vendor.products.reduce((s, p) => s + p.lines.filter((l) => l.price !== null).length, 0)
-	);
 
 	function visible(row: ReviewRow) {
 		if (filter === 'unconfirmed') return !reviewed.has(row.key);
@@ -149,8 +151,37 @@
 	});
 
 	// --- actions ---
-	function select(g: ReviewGroup, r: ReviewRow | null) {
+	function rangeKeys(fromKey: string, toKey: string) {
+		const keys = visibleRows.map((x) => x.r.key);
+		const a = keys.indexOf(fromKey);
+		const b = keys.indexOf(toKey);
+		if (a === -1 || b === -1) return [toKey];
+		return keys.slice(Math.min(a, b), Math.max(a, b) + 1);
+	}
+
+	/** Row click: plain = select one, shift = range from anchor, ctrl/cmd = add/remove. */
+	function clickRow(g: ReviewGroup, r: ReviewRow, e: MouseEvent) {
+		if (e.shiftKey && anchorKey) {
+			selection = new Set(rangeKeys(anchorKey, r.key));
+		} else if (e.ctrlKey || e.metaKey) {
+			const next = new Set(selection);
+			if (next.has(r.key)) next.delete(r.key);
+			else next.add(r.key);
+			selection = next;
+			anchorKey = r.key;
+		} else {
+			selection = new Set([r.key]);
+			anchorKey = r.key;
+		}
+		select(g, r, false);
+	}
+
+	function select(g: ReviewGroup, r: ReviewRow | null, resetSelection = true) {
 		selectedKey = r?.key ?? null;
+		if (resetSelection) {
+			selection = new Set(r ? [r.key] : []);
+			anchorKey = r?.key ?? null;
+		}
 		const qty = r?.qty ?? null;
 		const pn = g.product?.partNumber || g.requested?.pn || '';
 		focusSource(
@@ -158,8 +189,27 @@
 		);
 	}
 
+	/** Confirm/unconfirm a row, or the whole selection if the row is part of it. */
 	function toggleConfirm(key: string) {
-		store.setReviewed(vendor.id, [key], !reviewed.has(key));
+		const targets = selection.has(key) && selection.size > 1 ? [...selection] : [key];
+		const allDone = targets.every((k) => reviewed.has(k));
+		store.setReviewed(vendor.id, targets, !allDone);
+	}
+
+	function setSelectionConfirmed(value: boolean) {
+		store.setReviewed(vendor.id, [...selection], value);
+	}
+
+	/** Checkbox: plain = toggle (selection-aware); shift = confirm the range from the anchor. */
+	function clickCheckbox(r: ReviewRow, e: MouseEvent) {
+		e.stopPropagation();
+		if (e.shiftKey && anchorKey) {
+			const keys = rangeKeys(anchorKey, r.key);
+			selection = new Set(keys);
+			store.setReviewed(vendor.id, keys, true);
+			return;
+		}
+		toggleConfirm(r.key);
 	}
 
 	function confirmAllMatches() {
@@ -196,12 +246,17 @@
 	}
 
 	// --- keyboard: ↑/↓ or j/k to move, Enter/Space to confirm + advance ---
-	function move(delta: number) {
+	function move(delta: number, extend = false) {
 		if (!visibleRows.length) return;
 		const i = visibleRows.findIndex((x) => x.r.key === selectedKey);
 		const n = Math.max(0, Math.min(visibleRows.length - 1, i === -1 ? 0 : i + delta));
 		const { g, r } = visibleRows[n];
-		select(g, r);
+		if (extend && anchorKey) {
+			selection = new Set(rangeKeys(anchorKey, r.key));
+			select(g, r, false);
+		} else {
+			select(g, r);
+		}
 		document.getElementById(`row-${r.key}`)?.scrollIntoView({ block: 'nearest' });
 	}
 
@@ -211,18 +266,22 @@
 			if (t && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName)) return;
 			if (e.key === 'ArrowDown' || e.key === 'j') {
 				e.preventDefault();
-				move(1);
+				move(1, e.shiftKey);
 			} else if (e.key === 'ArrowUp' || e.key === 'k') {
 				e.preventDefault();
-				move(-1);
+				move(-1, e.shiftKey);
 			} else if ((e.key === 'Enter' || e.key === ' ') && selectedKey) {
 				e.preventDefault();
 				const key = selectedKey;
+				const multi = selection.size > 1;
 				const wasConfirmed = reviewed.has(key);
 				toggleConfirm(key);
-				if (!wasConfirmed && filter === 'all') move(1);
-			} else if (e.key === 'Escape' && legendPinned) {
+				if (!multi && !wasConfirmed && filter === 'all') move(1);
+			} else if (e.key === 'Escape' && (legendPinned || selection.size > 1)) {
+				// Registered before the page's handler, so this keeps Esc from leaving the page.
+				e.stopImmediatePropagation();
 				legendPinned = false;
+				selection = new Set(selectedKey ? [selectedKey] : []);
 			}
 		}
 		window.addEventListener('keydown', onKey);
@@ -234,6 +293,8 @@
 		void vendor.id;
 		untrack(() => {
 			selectedKey = null;
+			selection = new Set();
+			anchorKey = null;
 			expanded = new Set();
 		});
 	});
@@ -328,21 +389,22 @@
 	<!-- Toolbar -->
 	<header class="border-b border-gray-200 px-4 py-3">
 		<div class="flex items-center gap-3">
-			<div class="min-w-0 flex-1">
-				<h2 class="text-sm font-semibold tracking-tight text-gray-900">Confirm extracted quote</h2>
-				<p class="mt-0.5 text-xs text-gray-500">
-					<span class="font-medium text-gray-800">{summary.confirmed}/{summary.total}</span> rows
-					confirmed ·
+			<p class="min-w-0 flex-1 truncate text-xs text-gray-500">
+				{#if selection.size > 1}
+					<span class="font-medium text-blue-400">{selection.size} selected</span>
+					<button type="button" class="ml-2 rounded border border-gray-300 px-1.5 py-0.5 text-gray-800 hover:bg-gray-100" onclick={() => setSelectionConfirmed(true)}>Confirm</button>
+					<button type="button" class="rounded border border-gray-300 px-1.5 py-0.5 text-gray-800 hover:bg-gray-100" onclick={() => setSelectionConfirmed(false)}>Unconfirm</button>
+					<button type="button" class="px-1 text-gray-500 hover:text-gray-900" onclick={() => (selection = new Set(selectedKey ? [selectedKey] : []))}>Clear</button>
+				{:else}
 					<span class="font-medium {summary.attention ? 'text-amber-400' : 'text-emerald-400'}"
 						>{summary.attention} need attention</span
 					>
-					· {summary.partsQuoted}/{summary.partsRequested} parts quoted · {vendor.products.length} products
-					· {lineCount} lines ·
-					<span class={pricedCount === lineCount ? 'text-emerald-400' : 'text-amber-400'}
-						>{pricedCount}/{lineCount} priced</span
-					>
-				</p>
-			</div>
+					· {summary.partsQuoted}/{summary.partsRequested} parts quoted
+					{#if summary.confirmed > 0}
+						· <span class="font-medium text-gray-800">{summary.confirmed}/{summary.total}</span> confirmed
+					{/if}
+				{/if}
+			</p>
 
 			<button
 				type="button"
@@ -374,14 +436,14 @@
 			>
 				<button
 					type="button"
-					class="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-900 {legendPinned
+					class="inline-flex h-7 w-7 items-center justify-center rounded-md text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-900 {legendPinned
 						? 'bg-gray-100 text-gray-900'
 						: ''}"
 					aria-label="What do the statuses and colours mean?"
 					aria-expanded={legendOpen}
 					onclick={() => (legendPinned = !legendPinned)}
 				>
-					<Info class="h-4 w-4" /> Guide
+					<Info class="h-4 w-4" />
 				</button>
 				{#if legendOpen}
 					<div
@@ -447,6 +509,8 @@
 								<kbd class="rounded border border-gray-300 px-1 font-mono">↑</kbd>
 								<kbd class="rounded border border-gray-300 px-1 font-mono">↓</kbd> move ·
 								<kbd class="rounded border border-gray-300 px-1 font-mono">Enter</kbd> confirm &amp; next ·
+								<kbd class="rounded border border-gray-300 px-1 font-mono">Shift</kbd>+click select a range ·
+								<kbd class="rounded border border-gray-300 px-1 font-mono">Ctrl</kbd>+click add to selection ·
 								hover a status for details
 							</p>
 						</div>
@@ -583,14 +647,18 @@
 							{@const tone = TONE_CLS[STATUS_META[r.status].tone]}
 							{@const done = reviewed.has(r.key)}
 							{@const selected = selectedKey === r.key}
+							{@const inSel = selection.has(r.key)}
 							{@const line = r.line}
 							<tr
 								id="row-{r.key}"
-								class="cursor-pointer border-t border-gray-200/60 transition-colors
-									{colors ? tone.row : ''}
-									{selected ? 'outline-2 -outline-offset-2 outline-blue-500' : 'hover:bg-gray-100/60'}
-									{done && !selected ? 'opacity-50' : ''}"
-								onclick={() => select(g, r)}
+								class="cursor-pointer select-none border-t border-gray-200/60 transition-colors
+									{inSel ? 'bg-blue-500/15' : colors ? tone.row : ''}
+									{selected ? 'outline-2 -outline-offset-2 outline-blue-500' : inSel ? '' : 'hover:bg-gray-100/60'}
+									{done && !inSel ? 'opacity-50' : ''}"
+								onmousedown={(e) => {
+									if (e.shiftKey) e.preventDefault();
+								}}
+								onclick={(e) => clickRow(g, r, e)}
 								title={r.issues.join('\n')}
 							>
 								<td class="px-2 py-1 {colors ? tone.bar : ''}">
@@ -600,10 +668,7 @@
 											? 'border-emerald-500 bg-emerald-500 text-gray-50'
 											: 'border-gray-400 hover:border-gray-700'}"
 										aria-label={done ? 'Unconfirm row' : 'Confirm row'}
-										onclick={(e) => {
-											e.stopPropagation();
-											toggleConfirm(r.key);
-										}}
+										onclick={(e) => clickCheckbox(r, e)}
 									>
 										{#if done}<Check class="h-3 w-3" strokeWidth={3.5} />{/if}
 									</button>
@@ -639,7 +704,7 @@
 							</tr>
 							{#if line && g.product && (selected || LINE_NOTE_DEFS.some((d) => !blank(line[d.field])))}
 								{@const pid = g.product.id}
-								<tr class="text-[11px] {colors ? tone.row : ''} {done && !selected ? 'opacity-50' : ''}">
+								<tr class="text-[11px] {colors ? tone.row : ''} {done && !inSel ? 'opacity-50' : ''}">
 									<td class={colors ? tone.bar : ''}></td>
 									<td colspan={COLSPAN - 1} class="px-2 pb-1.5">
 										{#if selected && r.issues.length}

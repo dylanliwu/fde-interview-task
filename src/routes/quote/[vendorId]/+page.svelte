@@ -104,20 +104,6 @@
 			</div>
 
 			<div class="flex items-center gap-3">
-				<div
-					class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium {store.isSaving
-						? 'text-gray-500'
-						: 'text-emerald-700'}"
-				>
-					{#if store.isSaving}
-						<Loader2 class="h-3 w-3 animate-spin text-gray-400" />
-						<span>Saving…</span>
-					{:else}
-						<Check class="h-3 w-3 text-emerald-500" strokeWidth={3} />
-						<span>Saved</span>
-					{/if}
-				</div>
-
 				{#if vendor?.submittedAt}
 					<div
 						class="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
