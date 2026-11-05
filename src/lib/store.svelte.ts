@@ -78,6 +78,18 @@ function createStore() {
 			product.lines = [...product.lines, line].sort((a, b) => a.quantity - b.quantity);
 			scheduleSave();
 		},
+		/** Remove a line so it isn't submitted. Returns the removed line (for undo). */
+		removeLine(vendorId: string, productId: string, lineId: string): Line | null {
+			const product = state.vendors
+				.find((v) => v.id === vendorId)
+				?.products.find((p) => p.id === productId);
+			const line = product?.lines.find((l) => l.id === lineId);
+			if (!product || !line) return null;
+			const removed = $state.snapshot(line) as Line;
+			product.lines = product.lines.filter((l) => l.id !== lineId);
+			scheduleSave();
+			return removed;
+		},
 		setReviewed(vendorId: string, keys: string[], reviewed: boolean) {
 			const vendor = state.vendors.find((v) => v.id === vendorId);
 			if (!vendor) return;

@@ -21,7 +21,7 @@
 		type Tone
 	} from '$lib/review';
 	import { findInRequest, findInVendor, focusSource } from '$lib/source.svelte';
-	import { Check, ChevronRight, Plus, Info, X, Menu, Minus, Palette, ArrowLeftRight } from '@lucide/svelte';
+	import { Check, ChevronRight, Plus, Info, X, Menu, Minus, Palette, ArrowLeftRight, Trash2, Undo2 } from '@lucide/svelte';
 	import { layout, toggleSwapped } from '$lib/layout.svelte';
 	import CompactField from './CompactField.svelte';
 
@@ -34,7 +34,7 @@
 	const LINE_COLS = LINE_FIELD_DEFS.filter((d) => d.type !== 'textarea' && !HIDDEN_COLS.has(d.field));
 	const LINE_NOTE_DEFS = LINE_FIELD_DEFS.filter((d) => d.type === 'textarea');
 	const QTY_IDX = LINE_COLS.findIndex((d) => d.field === 'quantity');
-	const COLSPAN = 2 + LINE_COLS.length;
+	const COLSPAN = 3 + LINE_COLS.length; // ✓ + status + line fields + delete
 	const SHORT_HEADER: Partial<Record<keyof Line, string>> = {
 		isQuoting: 'Quoting',
 		quantity: 'Qty',
@@ -218,6 +218,31 @@
 		store.addLine(vendor.id, g.product.id, { ...makeEmptyLine(qty), isQuoting: true, currency });
 	}
 
+	// --- delete a line (not submitted), with a short-lived undo ---
+	type Removed = { productId: string; line: Line; key: string; wasConfirmed: boolean };
+	let lastRemoved = $state<Removed | null>(null);
+	let undoTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function deleteLine(g: ReviewGroup, r: ReviewRow) {
+		if (!g.product || !r.line) return;
+		const wasConfirmed = reviewed.has(r.key);
+		const line = store.removeLine(vendor.id, g.product.id, r.line.id);
+		if (!line) return;
+		if (wasConfirmed) store.setReviewed(vendor.id, [r.key], false);
+		lastRemoved = { productId: g.product.id, line, key: r.key, wasConfirmed };
+		if (undoTimer) clearTimeout(undoTimer);
+		undoTimer = setTimeout(() => (lastRemoved = null), 8000);
+	}
+
+	function undoDelete() {
+		if (!lastRemoved) return;
+		const { productId, line, key, wasConfirmed } = lastRemoved;
+		store.addLine(vendor.id, productId, line);
+		if (wasConfirmed) store.setReviewed(vendor.id, [key], true);
+		lastRemoved = null;
+		if (undoTimer) clearTimeout(undoTimer);
+	}
+
 	function toggleExpand(key: string) {
 		const next = new Set(expanded);
 		if (next.has(key)) next.delete(key);
@@ -391,6 +416,17 @@
 			<span class="tabular-nums">{vendor.products.length} parts</span>
 			<span class="text-gray-500">({summary.partsQuoted}/{summary.partsRequested} requested quoted)</span>
 		</p>
+
+		{#if lastRemoved}
+			<span class="inline-flex shrink-0 items-center gap-2 rounded-md border border-gray-300 bg-gray-100 px-2 py-1 text-xs text-gray-700">
+				Removed qty {lastRemoved.line.quantity} line
+				<button
+					type="button"
+					class="inline-flex items-center gap-1 font-semibold text-blue-400 hover:text-blue-300"
+					onclick={undoDelete}><Undo2 class="h-3 w-3" /> Undo</button
+				>
+			</span>
+		{/if}
 
 		<button
 			type="button"
@@ -614,6 +650,7 @@
 							{SHORT_HEADER[def.field] ?? def.header}{#if def.required}<span class="text-rose-500">*</span>{/if}
 						</th>
 					{/each}
+					<th class="w-8"><span class="sr-only">Delete</span></th>
 				</tr>
 			</thead>
 			{#each groups as g, gi (g.key)}
@@ -710,7 +747,7 @@
 							{@const line = r.line}
 							<tr
 								id="row-{r.key}"
-								class="cursor-pointer border-t border-gray-200/60 transition-colors
+								class="group cursor-pointer border-t border-gray-200/60 transition-colors
 									{colors ? tone.row : ''}
 									{selected ? 'outline-2 -outline-offset-2 outline-blue-500' : 'hover:bg-gray-100/60'}
 									{done && !selected ? 'opacity-50' : ''}"
@@ -738,6 +775,20 @@
 									{#each LINE_COLS as def (def.field)}
 										<td class="px-0.5 py-0.5 {COL_WIDTH[def.field] ?? ''}">{@render lineCell(def, line, pid, r, g)}</td>
 									{/each}
+									<td class="w-8 px-1 py-0.5 text-center">
+										<button
+											type="button"
+											class="rounded p-1 text-gray-500 hover:bg-rose-500/15 hover:text-rose-400 {selected
+												? 'opacity-100'
+												: 'opacity-0 focus:opacity-100 group-hover:opacity-100'}"
+											aria-label="Delete qty {line.quantity} line"
+											title="Delete this line (it won't be submitted)"
+											onclick={(e) => {
+												e.stopPropagation();
+												deleteLine(g, r);
+											}}><Trash2 class="h-3.5 w-3.5" /></button
+										>
+									</td>
 								{:else}
 									{#each { length: Math.max(0, QTY_IDX) } as _, i (i)}<td></td>{/each}
 									<td class="px-2 py-1 text-right font-mono tabular-nums text-gray-900">{r.qty ?? '—'}</td>
@@ -759,6 +810,7 @@
 											{/if}
 										</div>
 									</td>
+									<td></td>
 								{/if}
 							</tr>
 							{#if selected && r.issues.length}
