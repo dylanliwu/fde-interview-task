@@ -1,10 +1,15 @@
 <script lang="ts">
 	import type { Vendor } from '$lib/types';
-	import { Mail, Send } from '@lucide/svelte';
+	import { Mail, Send, Sparkles } from '@lucide/svelte';
+	import { buildReview, draftFollowUp } from '$lib/review';
 	import { store } from '$lib/store.svelte';
 	import EmailThread from './EmailThread.svelte';
 
 	let { vendor }: { vendor: Vendor } = $props();
+
+	function generateDraft() {
+		updateDraft(draftFollowUp(vendor, buildReview(vendor)));
+	}
 
 	function updateDraft(value: string) {
 		store.updateVendor(vendor.id, { followUpDraft: value });
@@ -46,7 +51,14 @@
 					Reply draft
 				</h3>
 			</div>
-			<span class="shrink-0 text-[11px] text-gray-400">not sent</span>
+			<button
+				type="button"
+				class="inline-flex shrink-0 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+				onclick={generateDraft}
+				title="Rewrite the draft from the issues found in review"
+			>
+				<Sparkles class="h-3 w-3" /> Draft from issues
+			</button>
 		</div>
 		<textarea
 			rows="7"

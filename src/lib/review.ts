@@ -202,14 +202,8 @@ export function draftFollowUp(vendor: Vendor, groups: ReviewGroup[]): string {
 		if (missingBreaks.length) {
 			asks.push(`${pn}: please add pricing for qty ${missingBreaks.join(', ')}.`);
 		}
-		for (const r of g.rows) {
-			if (r.status === 'incomplete' && r.line) {
-				const missing = LINE_FIELD_DEFS.filter((d) => d.required && isBlank(r.line![d.field])).map(
-					(d) => d.header.toLowerCase()
-				);
-				asks.push(`${pn} qty ${r.qty}: please confirm ${missing.join(', ')}.`);
-			}
-		}
+		// 'incomplete' rows are extraction gaps (value is usually in the source) — the
+		// reviewer fills those in; we don't ask the vendor for something they already sent.
 	}
 
 	const first = vendor.contactName.split(' ')[0] || 'there';
