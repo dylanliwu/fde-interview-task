@@ -54,8 +54,9 @@
 		leadTime: 'w-20'
 	};
 
-	type Filter = 'all' | 'attention' | 'unconfirmed';
+	type Filter = 'all' | 'todo';
 	let filter = $state<Filter>('all');
+	let headerOpen = $state(false);
 	/** Cursor row (drives source highlight) + multi-selection (shift = range, ctrl/cmd = toggle). */
 	let selectedKey = $state<string | null>(null);
 	let selection = $state(new Set<string>());
@@ -120,11 +121,20 @@
 	const groups = $derived(buildReview(vendor));
 	const reviewed = $derived(new Set(vendor.reviewedRows ?? []));
 	const summary = $derived(summarize(groups, vendor.reviewedRows ?? []));
+	const todoCount = $derived(summary.total - summary.confirmed);
+
+	// Quote header collapses to a one-line summary; missing required values stay visible.
+	const headerMissing = $derived(
+		HEADER_FIELD_DEFS.filter((d) => d.required && blank(vendor[d.field])).map((d) => d.header)
+	);
+	const headerSummary = $derived(
+		HEADER_FIELD_DEFS.filter((d) => d.type !== 'textarea' && !blank(vendor[d.field]))
+			.map((d) => (d.field === 'daysQuoteValid' ? `valid ${vendor[d.field]} days` : String(vendor[d.field])))
+			.join(' · ')
+	);
 
 	function visible(row: ReviewRow) {
-		if (filter === 'unconfirmed') return !reviewed.has(row.key);
-		if (filter === 'attention') return STATUS_META[row.status].attention && !reviewed.has(row.key);
-		return true;
+		return filter === 'todo' ? !reviewed.has(row.key) : true;
 	}
 	const visibleRows = $derived(groups.flatMap((g) => g.rows.filter(visible).map((r) => ({ g, r }))));
 
@@ -529,13 +539,14 @@
 		</div>
 
 		<div class="mt-2.5 flex items-center gap-1 text-xs">
-			{#each [['all', 'All'], ['attention', 'Needs attention'], ['unconfirmed', 'Unconfirmed']] as [f, label] (f)}
+			{#each [['all', 'All', summary.total], ['todo', 'To review', todoCount]] as [f, label, n] (f)}
 				<button
 					type="button"
 					class="rounded-md px-2 py-1 font-medium {filter === f
 						? 'bg-gray-200 text-gray-900'
 						: 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}"
-					onclick={() => (filter = f as Filter)}>{label}</button
+					onclick={() => (filter = f as Filter)}
+					>{label} <span class="tabular-nums text-gray-500">{n}</span></button
 				>
 			{/each}
 		</div>
@@ -543,17 +554,36 @@
 
 	<div class="min-h-0 flex-1 overflow-y-auto">
 		<!-- Quote header -->
-		<div class="border-b border-gray-200 px-4 py-2.5">
-			<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Quote header</p>
-			<div class="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2 xl:grid-cols-3">
-				{#each HEADER_FIELD_DEFS as def (def.field)}
-					<CompactField
-						{def}
-						value={vendor[def.field] as string | number | null}
-						onChange={(value) => store.updateVendor(vendor.id, { [def.field]: value } as Partial<Vendor>)}
-					/>
-				{/each}
-			</div>
+		<div class="border-b border-gray-200">
+			<button
+				type="button"
+				class="flex w-full items-center gap-2 px-4 py-1.5 text-left text-xs hover:bg-gray-100/60"
+				aria-expanded={headerOpen}
+				onclick={() => (headerOpen = !headerOpen)}
+			>
+				<ChevronRight class="h-3 w-3 shrink-0 text-gray-500 transition-transform {headerOpen ? 'rotate-90' : ''}" />
+				<span class="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Quote header</span>
+				{#if !headerOpen}
+					<span class="min-w-0 truncate text-gray-700">{headerSummary}</span>
+				{/if}
+				{#if headerMissing.length}
+					<span
+						class="ml-auto shrink-0 rounded border border-rose-500/40 bg-rose-500/15 px-1.5 text-[10px] font-semibold text-rose-400"
+						title="Missing: {headerMissing.join(', ')}">{headerMissing.length} missing</span
+					>
+				{/if}
+			</button>
+			{#if headerOpen}
+				<div class="grid grid-cols-1 gap-x-4 gap-y-1.5 px-4 pb-2.5 sm:grid-cols-2 xl:grid-cols-3">
+					{#each HEADER_FIELD_DEFS as def (def.field)}
+						<CompactField
+							{def}
+							value={vendor[def.field] as string | number | null}
+							onChange={(value) => store.updateVendor(vendor.id, { [def.field]: value } as Partial<Vendor>)}
+						/>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
 		<table class="w-full border-collapse text-[13px]">
