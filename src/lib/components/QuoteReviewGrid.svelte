@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import type { Line, Product, Vendor } from '$lib/types';
-	import { HEADER_FIELD_DEFS, PRODUCT_FIELD_DEFS, makeEmptyLine } from '$lib/fields';
+	import {
+		HEADER_FIELD_DEFS,
+		LINE_FIELD_DEFS,
+		PRODUCT_FIELD_DEFS,
+		makeEmptyLine,
+		type FieldDef
+	} from '$lib/fields';
 	import { store } from '$lib/store.svelte';
 	import {
 		buildReview,
@@ -14,10 +20,36 @@
 		type Tone
 	} from '$lib/review';
 	import { findInVendor, focusSource } from '$lib/source.svelte';
-	import { Check, ChevronRight, Plus, CheckCheck, Info } from '@lucide/svelte';
-	import FieldInput from './FieldInput.svelte';
+	import { Check, ChevronRight, Plus, CheckCheck, Info, X } from '@lucide/svelte';
+	import CompactField from './CompactField.svelte';
 
 	let { vendor }: { vendor: Vendor } = $props();
+
+	// --- schema-driven columns: every non-textarea line field is a column ---
+	const LINE_COLS = LINE_FIELD_DEFS.filter((d) => d.type !== 'textarea');
+	const LINE_NOTE_DEFS = LINE_FIELD_DEFS.filter((d) => d.type === 'textarea');
+	const QTY_IDX = LINE_COLS.findIndex((d) => d.field === 'quantity');
+	const COLSPAN = 2 + LINE_COLS.length;
+	const SHORT_HEADER: Partial<Record<keyof Line, string>> = {
+		isQuoting: 'Quoting',
+		quantity: 'Qty',
+		isFat: 'FAT',
+		unitCost: 'Unit cost',
+		variance: 'Var',
+		price: 'Ext price',
+		currency: 'Cur',
+		leadTime: 'Lead (d)'
+	};
+	const COL_WIDTH: Partial<Record<keyof Line, string>> = {
+		isQuoting: 'w-14',
+		quantity: 'w-14',
+		isFat: 'w-10',
+		unitCost: 'w-24',
+		variance: 'w-16',
+		price: 'w-28',
+		currency: 'w-[4.5rem]',
+		leadTime: 'w-20'
+	};
 
 	type Filter = 'all' | 'attention' | 'unconfirmed';
 	let filter = $state<Filter>('all');
@@ -44,38 +76,34 @@
 	let legendPinned = $state(false);
 	const legendOpen = $derived(legendHover || legendPinned);
 
-	const TONE_CLS: Record<Tone, { row: string; bar: string; pill: string; cell: string; swatch: string }> = {
+	const TONE_CLS: Record<Tone, { row: string; bar: string; pill: string; swatch: string }> = {
 		ok: {
 			row: 'bg-emerald-500/[0.06]',
 			bar: 'shadow-[inset_3px_0_0_var(--color-emerald-500)]',
 			pill: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400',
-			cell: '',
 			swatch: 'bg-emerald-500'
 		},
 		diff: {
 			row: 'bg-amber-500/[0.08]',
 			bar: 'shadow-[inset_3px_0_0_var(--color-amber-500)]',
 			pill: 'border-amber-500/40 bg-amber-500/15 text-amber-400',
-			cell: '',
 			swatch: 'bg-amber-500'
 		},
 		extra: {
 			row: 'bg-violet-500/[0.08]',
 			bar: 'shadow-[inset_3px_0_0_var(--color-violet-500)]',
 			pill: 'border-violet-500/40 bg-violet-500/15 text-violet-400',
-			cell: '',
 			swatch: 'bg-violet-500'
 		},
 		bad: {
 			row: 'bg-rose-500/[0.08]',
 			bar: 'shadow-[inset_3px_0_0_var(--color-rose-500)]',
 			pill: 'border-rose-500/40 bg-rose-500/15 text-rose-400',
-			cell: 'bg-rose-500/15 ring-1 ring-inset ring-rose-500/60',
 			swatch: 'bg-rose-500'
 		}
 	};
 	const NEUTRAL_PILL = 'border-gray-300 bg-gray-100 text-gray-700';
-	const BAD_CELL = TONE_CLS.bad.cell;
+	const BAD_CELL = 'bg-rose-500/15 ring-1 ring-inset ring-rose-500/60';
 
 	const STATUSES_BY_TONE = (Object.keys(TONES) as Tone[]).map((tone) => ({
 		tone,
@@ -86,6 +114,10 @@
 	const groups = $derived(buildReview(vendor));
 	const reviewed = $derived(new Set(vendor.reviewedRows ?? []));
 	const summary = $derived(summarize(groups, vendor.reviewedRows ?? []));
+	const lineCount = $derived(vendor.products.reduce((s, p) => s + p.lines.length, 0));
+	const pricedCount = $derived(
+		vendor.products.reduce((s, p) => s + p.lines.filter((l) => l.price !== null).length, 0)
+	);
 
 	function visible(row: ReviewRow) {
 		if (filter === 'unconfirmed') return !reviewed.has(row.key);
@@ -93,6 +125,28 @@
 		return true;
 	}
 	const visibleRows = $derived(groups.flatMap((g) => g.rows.filter(visible).map((r) => ({ g, r }))));
+
+	// --- part stock status: refetch only when the set of PNs changes, not on every edit ---
+	type PartStatus = { partNumber: string; stockStatus: 'in_stock' | 'low_stock'; lastQuoted: string };
+	let partStatuses = $state<Record<string, PartStatus>>({});
+	const pnKey = $derived(vendor.products.map((p) => p.partNumber).join('|'));
+	$effect(() => {
+		const pns = pnKey.split('|').filter(Boolean);
+		let cancelled = false;
+		void Promise.all(
+			pns.map((pn) =>
+				fetch(`/api/parts/${encodeURIComponent(pn)}/status`)
+					.then((r) => r.json() as Promise<PartStatus>)
+					.catch(() => null)
+			)
+		).then((results) => {
+			if (cancelled) return;
+			const next: Record<string, PartStatus> = {};
+			for (const s of results) if (s) next[s.partNumber] = s;
+			partStatuses = next;
+		});
+		return () => (cancelled = true);
+	});
 
 	// --- actions ---
 	function select(g: ReviewGroup, r: ReviewRow | null) {
@@ -135,6 +189,11 @@
 	}
 
 	const num = (v: string) => (v.trim() === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+	const blank = (v: unknown) => v === null || v === undefined || v === '';
+
+	function shortDate(iso: string) {
+		return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+	}
 
 	// --- keyboard: ↑/↓ or j/k to move, Enter/Space to confirm + advance ---
 	function move(delta: number) {
@@ -179,8 +238,8 @@
 		});
 	});
 
-	const cell =
-		'w-full rounded border border-transparent bg-transparent px-1.5 py-1 text-right tabular-nums text-[13px] text-gray-900 hover:border-gray-300 focus:border-blue-500 focus:bg-gray-50 focus:outline-none';
+	const cellInput =
+		'w-full rounded border border-transparent bg-transparent px-1.5 py-1 text-[13px] text-gray-900 tabular-nums hover:border-gray-300 focus:border-blue-500 focus:bg-gray-50 focus:outline-none';
 </script>
 
 {#snippet pill(status: RowStatus)}
@@ -193,66 +252,76 @@
 	>
 {/snippet}
 
-{#snippet legendButton()}
-	<div
-		class="relative"
-		role="presentation"
-		onmouseenter={() => (legendHover = true)}
-		onmouseleave={() => (legendHover = false)}
-	>
+{#snippet lineCell(def: FieldDef<Line>, line: Line, pid: string, row: ReviewRow, g: ReviewGroup)}
+	{@const v = line[def.field]}
+	{@const isBad =
+		colors && ((def.required && blank(v)) || (def.field === 'price' && row.status === 'math'))}
+	{#if def.field === 'quantity'}
+		<!-- Qty commits on change (blur/Enter), not per keystroke: it re-keys the row against the RFQ. -->
+		<input
+			type="number"
+			step="1"
+			class="{cellInput} text-right font-mono {isBad ? BAD_CELL : ''}"
+			value={line.quantity}
+			onclick={(e) => e.stopPropagation()}
+			onfocus={() => select(g, row)}
+			onchange={(e) => {
+				const q = num(e.currentTarget.value);
+				if (q !== null) updateLine(pid, line.id, { quantity: q });
+			}}
+		/>
+	{:else if def.type === 'checkbox'}
 		<button
 			type="button"
-			class="inline-flex h-6 w-6 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-900 {legendPinned
-				? 'bg-gray-100 text-gray-900'
-				: ''}"
-			aria-label="What do the statuses and colours mean?"
-			aria-expanded={legendOpen}
+			class="mx-auto flex h-5 w-5 items-center justify-center rounded border text-[10px] {v === true
+				? 'border-blue-500 bg-blue-500/20 text-blue-400'
+				: v === false
+					? 'border-gray-300 text-gray-500'
+					: 'border-dashed border-gray-300 text-gray-400'}"
+			title="{def.header} {v === true ? 'Yes' : v === false ? 'No' : 'Not set'}"
+			aria-pressed={v === true}
 			onclick={(e) => {
 				e.stopPropagation();
-				legendPinned = !legendPinned;
+				updateLine(pid, line.id, { [def.field]: v === true ? false : true } as Partial<Line>);
 			}}
 		>
-			<Info class="h-4 w-4" />
+			{#if v === true}<Check class="h-3 w-3" strokeWidth={3} />{:else if v === false}<X class="h-3 w-3" />{/if}
 		</button>
-		{#if legendOpen}
-			<div
-				class="absolute right-0 top-full z-30 mt-1 w-[380px] rounded-xl border border-gray-200 bg-white p-4 text-left text-xs normal-case tracking-normal shadow-2xl shadow-black/50"
-			>
-				<p class="mb-3 font-semibold text-gray-900">How to read this table</p>
-				<p class="mb-3 text-gray-600">
-					Each row is one <b class="text-gray-800">quantity</b> of one part. We compare what the AI
-					extracted from the vendor's reply against what we asked for in the RFQ. Click a row to
-					highlight where it came from in the email, then tick
-					<span class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm bg-emerald-500 align-[-2px] text-gray-50"><Check class="h-2.5 w-2.5" strokeWidth={4} /></span>
-					once you've checked it.
-				</p>
-				<div class="space-y-3">
-					{#each STATUSES_BY_TONE as { tone, statuses } (tone)}
-						<div>
-							<div class="flex items-center gap-2">
-								<span class="h-2.5 w-2.5 rounded-sm {TONE_CLS[tone].swatch}"></span>
-								<span class="font-semibold text-gray-900">{TONES[tone].title}</span>
-							</div>
-							<p class="ml-[18px] mt-0.5 text-gray-500">{TONES[tone].help}</p>
-							<ul class="ml-[18px] mt-1.5 space-y-1.5">
-								{#each statuses as s (s)}
-									<li class="flex items-start gap-2">
-										<span class="mt-px shrink-0">{@render pill(s)}</span>
-										<span class="text-gray-600">{STATUS_META[s].help}</span>
-									</li>
-								{/each}
-							</ul>
-						</div>
-					{/each}
-				</div>
-				<p class="mt-3 border-t border-gray-200 pt-2 text-[11px] text-gray-500">
-					Shortcuts: <kbd class="rounded border border-gray-300 px-1 font-mono">↑</kbd>
-					<kbd class="rounded border border-gray-300 px-1 font-mono">↓</kbd> move ·
-					<kbd class="rounded border border-gray-300 px-1 font-mono">Enter</kbd> confirm &amp; next
-				</p>
-			</div>
-		{/if}
-	</div>
+	{:else if def.type === 'single_select'}
+		<select
+			class="{cellInput} px-1 {isBad ? BAD_CELL : ''}"
+			value={(v as string) ?? ''}
+			onclick={(e) => e.stopPropagation()}
+			onfocus={() => select(g, row)}
+			onchange={(e) => updateLine(pid, line.id, { [def.field]: e.currentTarget.value } as Partial<Line>)}
+		>
+			<option value="">—</option>
+			{#each def.options ?? [] as opt (opt)}<option value={opt}>{opt}</option>{/each}
+		</select>
+	{:else if def.type === 'text'}
+		<input
+			type="text"
+			class="{cellInput} {isBad ? BAD_CELL : ''}"
+			value={(v as string) ?? ''}
+			onclick={(e) => e.stopPropagation()}
+			onfocus={() => select(g, row)}
+			oninput={(e) => updateLine(pid, line.id, { [def.field]: e.currentTarget.value } as Partial<Line>)}
+		/>
+	{:else}
+		{@const expected =
+			def.field === 'price' && line.unitCost !== null ? (line.unitCost * line.quantity).toFixed(2) : ''}
+		<input
+			type="number"
+			step={def.type === 'integer' ? '1' : '0.01'}
+			class="{cellInput} text-right {isBad ? BAD_CELL : ''}"
+			value={blank(v) ? '' : String(v)}
+			placeholder={expected}
+			title={expected ? `qty × unit cost = ${expected}` : ''}
+			onclick={(e) => e.stopPropagation()}
+			onfocus={() => select(g, row)}
+			oninput={(e) => updateLine(pid, line.id, { [def.field]: num(e.currentTarget.value) } as Partial<Line>)}
+		/>
+	{/if}
 {/snippet}
 
 <section class="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white">
@@ -267,7 +336,11 @@
 					<span class="font-medium {summary.attention ? 'text-amber-400' : 'text-emerald-400'}"
 						>{summary.attention} need attention</span
 					>
-					· {summary.partsQuoted}/{summary.partsRequested} parts quoted
+					· {summary.partsQuoted}/{summary.partsRequested} parts quoted · {vendor.products.length} products
+					· {lineCount} lines ·
+					<span class={pricedCount === lineCount ? 'text-emerald-400' : 'text-amber-400'}
+						>{pricedCount}/{lineCount} priced</span
+					>
 				</p>
 			</div>
 
@@ -292,7 +365,94 @@
 				Colours
 			</button>
 
-			{@render legendButton()}
+			<!-- Legend -->
+			<div
+				class="relative"
+				role="presentation"
+				onmouseenter={() => (legendHover = true)}
+				onmouseleave={() => (legendHover = false)}
+			>
+				<button
+					type="button"
+					class="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-900 {legendPinned
+						? 'bg-gray-100 text-gray-900'
+						: ''}"
+					aria-label="What do the statuses and colours mean?"
+					aria-expanded={legendOpen}
+					onclick={() => (legendPinned = !legendPinned)}
+				>
+					<Info class="h-4 w-4" /> Guide
+				</button>
+				{#if legendOpen}
+					<div
+						class="absolute right-0 top-full z-30 mt-1 max-h-[75vh] w-[460px] overflow-y-auto rounded-xl border border-gray-200 bg-white text-xs shadow-2xl shadow-black/60"
+					>
+						<div class="border-b border-gray-200 px-4 py-3">
+							<div class="flex items-center justify-between">
+								<p class="text-sm font-semibold text-gray-900">How to use this table</p>
+								{#if legendPinned}
+									<button
+										type="button"
+										class="rounded p-0.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+										aria-label="Close guide"
+										onclick={() => (legendPinned = false)}><X class="h-3.5 w-3.5" /></button
+									>
+								{/if}
+							</div>
+							<p class="mt-1 leading-relaxed text-gray-600">
+								Each row is <b class="text-gray-800">one quantity of one part</b>. It compares what the AI
+								pulled out of the vendor's reply with what we asked for in the RFQ.
+							</p>
+							<ol class="mt-2.5 space-y-1.5 text-gray-700">
+								{#each ['Click a row. Its source text lights up in the email on the left.', 'Check the numbers match. Fix any cell inline.', 'Tick the box (or press Enter) to confirm and move on.'] as step, i (i)}
+									<li class="flex gap-2">
+										<span
+											class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-gray-200 text-[10px] font-semibold text-gray-800"
+											>{i + 1}</span
+										>
+										<span>{step}</span>
+									</li>
+								{/each}
+							</ol>
+						</div>
+
+						{#each STATUSES_BY_TONE as { tone, statuses } (tone)}
+							<section class="border-b border-gray-200 px-4 py-3">
+								<div class="flex items-center gap-2">
+									<span class="h-3.5 w-1 rounded-full {TONE_CLS[tone].swatch}"></span>
+									<h4 class="font-semibold text-gray-900">{TONES[tone].title}</h4>
+								</div>
+								<p class="ml-3 mt-0.5 text-gray-500">{TONES[tone].help}</p>
+								<dl class="ml-3 mt-2 grid grid-cols-[7.5rem_1fr] items-start gap-x-3 gap-y-2">
+									{#each statuses as s (s)}
+										<dt>{@render pill(s)}</dt>
+										<dd class="leading-relaxed text-gray-600">{STATUS_META[s].help}</dd>
+									{/each}
+								</dl>
+							</section>
+						{/each}
+
+						<div class="space-y-1.5 px-4 py-3 text-gray-600">
+							<p class="flex items-center gap-2">
+								<span class="h-3.5 w-6 shrink-0 rounded {BAD_CELL}"></span>
+								Red cell: a required value is empty or doesn't add up.
+							</p>
+							<p class="flex items-center gap-2">
+								<span class="flex h-3.5 w-6 shrink-0 items-center justify-center"
+									><span class="h-3 w-3 rounded-sm bg-emerald-500"></span></span
+								>
+								Ticked rows fade out so the remaining work stands out.
+							</p>
+							<p class="pt-1 text-[11px] text-gray-500">
+								<kbd class="rounded border border-gray-300 px-1 font-mono">↑</kbd>
+								<kbd class="rounded border border-gray-300 px-1 font-mono">↓</kbd> move ·
+								<kbd class="rounded border border-gray-300 px-1 font-mono">Enter</kbd> confirm &amp; next ·
+								hover a status for details
+							</p>
+						</div>
+					</div>
+				{/if}
+			</div>
 
 			<button
 				type="button"
@@ -319,37 +479,46 @@
 
 	<div class="min-h-0 flex-1 overflow-y-auto">
 		<!-- Quote header -->
-		<div class="grid gap-3 border-b border-gray-200 px-4 py-3 sm:grid-cols-3">
-			{#each HEADER_FIELD_DEFS.filter((d) => d.type !== 'textarea') as def (def.field)}
-				<FieldInput
-					{def}
-					value={vendor[def.field] as string | number | null}
-					onChange={(value) => store.updateVendor(vendor.id, { [def.field]: value } as Partial<Vendor>)}
-				/>
-			{/each}
+		<div class="border-b border-gray-200 px-4 py-2.5">
+			<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Quote header</p>
+			<div class="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2 xl:grid-cols-3">
+				{#each HEADER_FIELD_DEFS as def (def.field)}
+					<CompactField
+						{def}
+						value={vendor[def.field] as string | number | null}
+						onChange={(value) => store.updateVendor(vendor.id, { [def.field]: value } as Partial<Vendor>)}
+					/>
+				{/each}
+			</div>
 		</div>
 
 		<table class="w-full border-collapse text-[13px]">
 			<thead class="sticky top-0 z-20 bg-white text-[11px] uppercase tracking-wide text-gray-500 shadow-[0_1px_0_var(--color-gray-200)]">
 				<tr>
-					<th class="w-10 px-2 py-2" title="Confirmed">✓</th>
-					<th class="px-2 py-2 text-left font-semibold">
-						Status
-					</th>
-					<th class="px-2 py-2 text-right font-semibold">Qty</th>
-					<th class="px-2 py-2 text-right font-semibold">Unit cost</th>
-					<th class="px-2 py-2 text-right font-semibold">Ext price</th>
-					<th class="px-2 py-2 text-left font-semibold">Cur</th>
-					<th class="px-2 py-2 text-right font-semibold">Lead (days)</th>
+					<th class="w-9 px-2 py-2" title="Confirmed">✓</th>
+					<th class="px-2 py-2 text-left font-semibold">Status</th>
+					{#each LINE_COLS as def (def.field)}
+						<th
+							class="px-1.5 py-2 font-semibold {COL_WIDTH[def.field] ?? ''} {def.type === 'checkbox'
+								? 'text-center'
+								: def.type === 'text' || def.type === 'single_select'
+									? 'text-left'
+									: 'text-right'}"
+							title={def.header}
+						>
+							{SHORT_HEADER[def.field] ?? def.header}{#if def.required}<span class="text-rose-500">*</span>{/if}
+						</th>
+					{/each}
 				</tr>
 			</thead>
 			{#each groups as g, gi (g.key)}
 				{@const rows = g.rows.filter(visible)}
 				{#if rows.length}
+					{@const stock = g.product ? partStatuses[g.product.partNumber] : undefined}
 					<tbody>
-						<!-- Part header: requested vs quoted PN + requested qtys -->
+						<!-- Part header: requested vs quoted PN, NSN, description, requested qtys -->
 						<tr class="cursor-pointer border-t-8 border-gray-50 bg-gray-100/70" onclick={() => select(g, null)}>
-							<td colspan="7" class="px-2 py-1.5">
+							<td colspan={COLSPAN} class="px-2 py-1.5">
 								<div class="flex items-center gap-2">
 									<span class="w-6 text-center font-mono text-[11px] text-gray-500">{g.requested ? gi + 1 : '+'}</span>
 									{#if g.kind === 'extra'}
@@ -362,15 +531,24 @@
 									{:else}
 										<span class="font-mono font-semibold text-gray-900">{g.requested?.pn}</span>
 									{/if}
-									{#if g.requested}
-										<span class="text-[11px] text-gray-500">
-											asked for {g.requested.qtys.join(' · ')}
-										</span>
+									{#if stock}
+										<span
+											class="rounded px-1 text-[10px] font-semibold uppercase {stock.stockStatus === 'in_stock'
+												? 'text-emerald-400'
+												: 'text-amber-400'}"
+											title="Last quoted {shortDate(stock.lastQuoted)}"
+											>{stock.stockStatus === 'in_stock' ? 'In stock' : 'Low stock'}</span
+										>
 									{/if}
+									<span class="min-w-0 flex-1 truncate text-[11px] text-gray-500">
+										<span class="font-mono">NSN {g.product?.nsn ?? g.requested?.nsn}</span>
+										· {g.product?.description ?? g.requested?.desc}
+										{#if g.requested}· asked {g.requested.qtys.join(' / ')}{/if}
+									</span>
 									{#if g.product}
 										<button
 											type="button"
-											class="ml-auto inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-200 hover:text-gray-900"
+											class="inline-flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-200 hover:text-gray-900"
 											onclick={(e) => {
 												e.stopPropagation();
 												toggleExpand(g.key);
@@ -387,16 +565,14 @@
 						{#if expanded.has(g.key) && g.product}
 							{@const product = g.product}
 							<tr>
-								<td colspan="7" class="border-b border-gray-200 px-4 py-3">
-									<div class="grid gap-3 sm:grid-cols-3">
+								<td colspan={COLSPAN} class="border-b border-gray-200 bg-gray-50/60 px-4 py-2.5">
+									<div class="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2 xl:grid-cols-3">
 										{#each PRODUCT_FIELD_DEFS as def (def.field)}
-											<div class={def.type === 'textarea' ? 'sm:col-span-3' : ''}>
-												<FieldInput
-													{def}
-													value={product[def.field] as string | number | boolean | null}
-													onChange={(value) => updateProduct(product.id, { [def.field]: value } as Partial<Product>)}
-												/>
-											</div>
+											<CompactField
+												{def}
+												value={product[def.field] as string | number | boolean | null}
+												onChange={(value) => updateProduct(product.id, { [def.field]: value } as Partial<Product>)}
+											/>
 										{/each}
 									</div>
 								</td>
@@ -404,12 +580,10 @@
 						{/if}
 
 						{#each rows as r (r.key)}
-							{@const meta = STATUS_META[r.status]}
-							{@const tone = TONE_CLS[meta.tone]}
+							{@const tone = TONE_CLS[STATUS_META[r.status].tone]}
 							{@const done = reviewed.has(r.key)}
 							{@const selected = selectedKey === r.key}
 							{@const line = r.line}
-							{@const bad = colors ? BAD_CELL : ''}
 							<tr
 								id="row-{r.key}"
 								class="cursor-pointer border-t border-gray-200/60 transition-colors
@@ -435,61 +609,15 @@
 									</button>
 								</td>
 								<td class="px-2 py-1">{@render pill(r.status)}</td>
-								<td class="px-2 py-1 text-right font-mono tabular-nums text-gray-900">{r.qty ?? '—'}</td>
 								{#if line && g.product}
 									{@const pid = g.product.id}
-									{@const expected = line.unitCost !== null ? (line.unitCost * line.quantity).toFixed(2) : ''}
-									<td class="w-24 px-1 py-0.5">
-										<input
-											class="{cell} {line.unitCost === null ? bad : ''}"
-											type="number"
-											step="0.01"
-											value={line.unitCost ?? ''}
-											onclick={(e) => e.stopPropagation()}
-											onfocus={() => select(g, r)}
-											oninput={(e) => updateLine(pid, line.id, { unitCost: num(e.currentTarget.value) })}
-										/>
-									</td>
-									<td class="w-28 px-1 py-0.5">
-										<input
-											class="{cell} {line.price === null || r.status === 'math' ? bad : ''}"
-											type="number"
-											step="0.01"
-											value={line.price ?? ''}
-											placeholder={expected}
-											title={expected ? `qty × unit cost = ${expected}` : ''}
-											onclick={(e) => e.stopPropagation()}
-											onfocus={() => select(g, r)}
-											oninput={(e) => updateLine(pid, line.id, { price: num(e.currentTarget.value) })}
-										/>
-									</td>
-									<td class="w-20 px-1 py-0.5">
-										<select
-											class="w-full rounded border border-transparent bg-transparent px-1 py-1 text-[13px] text-gray-900 hover:border-gray-300 {line.currency ? '' : bad}"
-											value={line.currency}
-											onclick={(e) => e.stopPropagation()}
-											onfocus={() => select(g, r)}
-											onchange={(e) => updateLine(pid, line.id, { currency: e.currentTarget.value as Line['currency'] })}
-										>
-											<option value="">—</option>
-											<option>USD</option>
-											<option>EUR</option>
-											<option>GBP</option>
-										</select>
-									</td>
-									<td class="w-24 px-1 py-0.5">
-										<input
-											class="{cell} {line.leadTime === null ? bad : ''}"
-											type="number"
-											step="1"
-											value={line.leadTime ?? ''}
-											onclick={(e) => e.stopPropagation()}
-											onfocus={() => select(g, r)}
-											oninput={(e) => updateLine(pid, line.id, { leadTime: num(e.currentTarget.value) })}
-										/>
-									</td>
+									{#each LINE_COLS as def (def.field)}
+										<td class="px-0.5 py-0.5 {COL_WIDTH[def.field] ?? ''}">{@render lineCell(def, line, pid, r, g)}</td>
+									{/each}
 								{:else}
-									<td colspan="4" class="px-2 py-1 text-xs text-gray-500">
+									{#each { length: Math.max(0, QTY_IDX) } as _, i (i)}<td></td>{/each}
+									<td class="px-2 py-1 text-right font-mono tabular-nums text-gray-900">{r.qty ?? '—'}</td>
+									<td colspan={LINE_COLS.length - QTY_IDX - 1} class="px-2 py-1 text-xs text-gray-500">
 										<div class="flex items-center gap-2">
 											<span class="truncate italic">{r.issues[0]}</span>
 											{#if r.status === 'missing_break' && g.product && r.qty !== null}
@@ -509,12 +637,27 @@
 									</td>
 								{/if}
 							</tr>
-							{#if (selected && line && r.issues.length) || line?.additionalNotes}
+							{#if line && g.product && (selected || LINE_NOTE_DEFS.some((d) => !blank(line[d.field])))}
+								{@const pid = g.product.id}
 								<tr class="text-[11px] {colors ? tone.row : ''} {done && !selected ? 'opacity-50' : ''}">
 									<td class={colors ? tone.bar : ''}></td>
-									<td colspan="6" class="px-2 pb-1.5 text-gray-500">
-										{#if selected && r.issues.length}<span class="text-gray-700">{r.issues.join(' · ')}</span>{/if}
-										{#if line?.additionalNotes}<span class="italic"> Vendor note: {line.additionalNotes}</span>{/if}
+									<td colspan={COLSPAN - 1} class="px-2 pb-1.5">
+										{#if selected && r.issues.length}
+											<p class="mb-1 text-gray-700">{r.issues.join(' · ')}</p>
+										{/if}
+										{#each LINE_NOTE_DEFS as def (def.field)}
+											<label class="flex items-start gap-2">
+												<span class="shrink-0 pt-0.5 text-gray-500">{def.header}</span>
+												<textarea
+													rows="1"
+													class="min-h-5 w-full resize-none rounded border border-transparent bg-transparent px-1 py-0.5 italic text-gray-700 [field-sizing:content] hover:border-gray-300 focus:border-blue-500 focus:bg-gray-50 focus:not-italic focus:outline-none"
+													placeholder="Add a note…"
+													value={(line[def.field] as string) ?? ''}
+													onclick={(e) => e.stopPropagation()}
+													oninput={(e) => updateLine(pid, line.id, { [def.field]: e.currentTarget.value } as Partial<Line>)}
+												></textarea>
+											</label>
+										{/each}
 									</td>
 								</tr>
 							{/if}

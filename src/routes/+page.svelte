@@ -13,7 +13,9 @@
 
 	function lineCounts(vendor: Vendor) {
 		const s = summarize(buildReview(vendor), vendor.reviewedRows ?? []);
-		return { confirmed: s.confirmed, total: s.total, attention: s.attention };
+		const lines = vendor.products.flatMap((p) => p.lines);
+		const priced = lines.filter((l) => l.price !== null).length;
+		return { confirmed: s.confirmed, total: s.total, attention: s.attention, lines: lines.length, priced };
 	}
 
 	function lastEmail(vendor: Vendor) {
@@ -100,6 +102,10 @@
 										class="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700"
 									>
 										{vendor.products.length} products
+										<span class="text-gray-300">·</span>
+										{counts.lines} lines
+										<span class="text-gray-300">·</span>
+										{counts.priced}/{counts.lines} priced
 									</span>
 
 									<span
