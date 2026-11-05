@@ -3,8 +3,15 @@
 	import { FileText, ChevronDown } from '@lucide/svelte';
 	import { slide } from 'svelte/transition';
 
-	let { attachment }: { attachment: EmailAttachment } = $props();
-	let open = $state(false);
+	import HighlightedText from './HighlightedText.svelte';
+	import { sourceFocus } from '$lib/source.svelte';
+
+	let { attachment, emailId }: { attachment: EmailAttachment; emailId: string } = $props();
+	let open = $state(true);
+
+	$effect(() => {
+		if (sourceFocus.match?.attachmentId === attachment.id) open = true;
+	});
 </script>
 
 <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -46,8 +53,11 @@
 							Page {i + 1} of {attachment.pages.length}
 						</span>
 					</div>
-					<pre
-						class="overflow-x-auto whitespace-pre p-4 font-mono text-[11px] leading-relaxed text-gray-900">{page}</pre>
+					<HighlightedText
+						text={page}
+						sourceId={`${emailId}:${attachment.id}:${i}`}
+						class="overflow-x-auto whitespace-pre p-4 font-mono text-[11px] leading-relaxed text-gray-900"
+					/>
 				</article>
 			{/each}
 		</div>

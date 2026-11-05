@@ -4,6 +4,8 @@
 	import { slide } from 'svelte/transition';
 	import { avatarColor, initials } from '$lib/avatar';
 	import PdfAttachment from './PdfAttachment.svelte';
+	import HighlightedText from './HighlightedText.svelte';
+	import { sourceFocus } from '$lib/source.svelte';
 
 	let { emails }: { emails: Email[] } = $props();
 
@@ -12,6 +14,12 @@
 	$effect(() => {
 		const last = emails[emails.length - 1];
 		openIds = new Set(last ? [last.id] : []);
+	});
+
+	// Open whichever email holds the focused source match.
+	$effect(() => {
+		const id = sourceFocus.match?.emailId;
+		if (id && !openIds.has(id)) openIds = new Set([...openIds, id]);
 	});
 
 	function toggle(id: string) {
@@ -94,13 +102,16 @@
 						<dd class="text-gray-700">{shortDate(email.date)}</dd>
 					</dl>
 
-					<pre
-						class="whitespace-pre-wrap break-words font-sans text-[13px] leading-relaxed text-gray-800">{email.body}</pre>
+					<HighlightedText
+						text={email.body}
+						sourceId={email.id}
+						class="whitespace-pre-wrap break-words font-sans text-[13px] leading-relaxed text-gray-800"
+					/>
 
 					{#if email.attachments.length}
 						<div class="mt-4 space-y-3">
 							{#each email.attachments as attachment (attachment.id)}
-								<PdfAttachment {attachment} />
+								<PdfAttachment {attachment} emailId={email.id} />
 							{/each}
 						</div>
 					{/if}
