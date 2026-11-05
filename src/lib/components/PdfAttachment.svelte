@@ -5,6 +5,7 @@
 
 	import HighlightedText from './HighlightedText.svelte';
 	import { sourceFocus } from '$lib/source.svelte';
+	import { emailColor } from '$lib/emailColors.svelte';
 
 	let { attachment, emailId }: { attachment: EmailAttachment; emailId: string } = $props();
 	let open = $state(true);
@@ -57,6 +58,7 @@
 					<HighlightedText
 						text={page}
 						sourceId={`${emailId}:${attachment.id}:${i}`}
+						color={emailColor(emailId)}
 						class="overflow-x-auto whitespace-pre p-4 font-mono text-[11px] leading-relaxed text-gray-900"
 					/>
 				</article>

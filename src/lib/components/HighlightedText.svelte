@@ -1,9 +1,16 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { sourceFocus } from '$lib/source.svelte';
+	import { EMAIL_COLORS, type EmailColor } from '$lib/emailColors.svelte';
 
-	let { text, sourceId, class: cls = '' }: { text: string; sourceId: string; class?: string } =
-		$props();
+	let {
+		text,
+		sourceId,
+		color = 'none',
+		class: cls = ''
+	}: { text: string; sourceId: string; color?: EmailColor; class?: string } = $props();
+
+	const hl = $derived(EMAIL_COLORS[color]);
 
 	let el = $state<HTMLElement | null>(null);
 
@@ -39,7 +46,7 @@
 
 <pre bind:this={el} class={cls}>{#each segments as s, i (i)}{#if s.k === 'none'}{s.t}{:else if s.k === 'block'}<mark
 				data-hl="block"
-				class="rounded-sm bg-yellow-100 text-inherit">{s.t}</mark
-			>{:else}<mark data-hl="line" class="rounded-sm bg-yellow-300 text-inherit ring-2 ring-yellow-400"
+				class="rounded-sm text-inherit {hl.block}">{s.t}</mark
+			>{:else}<mark data-hl="line" class="rounded-sm text-inherit {hl.line}"
 				>{s.t}</mark
 			>{/if}{/each}</pre>
