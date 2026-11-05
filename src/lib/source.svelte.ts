@@ -53,6 +53,44 @@ export function findInVendor(vendor: Vendor, pn: string, qty: number | null): So
 	return null;
 }
 
+/**
+ * Find what we asked for: the part's line in our outbound RFQ email (with the requested
+ * qty breaks emphasised). If `pn` is null or not on the RFQ, highlight the whole requested
+ * list — "here's everything we asked for, and it isn't in there".
+ */
+export function findInRequest(vendor: Vendor, pn: string | null): SourceMatch | null {
+	const outbound = vendor.emails[0]?.from;
+	for (const email of vendor.emails.filter((e) => e.from === outbound)) {
+		const text = email.body;
+		if (pn) {
+			const m = new RegExp(`^.*${esc(pn)}(?![\\w-]).*$`, 'm').exec(text);
+			if (m) {
+				const start = m.index;
+				const end = start + m[0].length;
+				const q = m[0].search(/requested qty|qty breaks|qty/i);
+				return {
+					sourceId: email.id,
+					emailId: email.id,
+					attachmentId: null,
+					block: [start, end],
+					line: q === -1 ? [start, end] : [start + q, end]
+				};
+			}
+		}
+		const list = /^[ \t]*\d+[.)][^\n]*(?:\n[ \t]*\d+[.)][^\n]*)*/m.exec(text);
+		if (list) {
+			return {
+				sourceId: email.id,
+				emailId: email.id,
+				attachmentId: null,
+				block: [list.index, list.index + list[0].length],
+				line: null
+			};
+		}
+	}
+	return null;
+}
+
 /** Currently focused source location — shared by the grid and the source pane. */
 export const sourceFocus = $state<{ match: SourceMatch | null; nonce: number }>({
 	match: null,

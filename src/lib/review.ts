@@ -82,12 +82,15 @@ export const STATUS_META: Record<
 	}
 };
 
+/** `rfq: true` = the issue is about what we requested, so it can point at the RFQ email. */
+export type Issue = { text: string; rfq?: boolean };
+
 export type ReviewRow = {
 	key: string;
 	qty: number | null;
 	line: Line | null;
 	status: RowStatus;
-	issues: string[];
+	issues: Issue[];
 };
 
 export type ReviewGroup = {
@@ -100,17 +103,19 @@ export type ReviewGroup = {
 
 const isBlank = (v: unknown) => v === null || v === undefined || v === '';
 
-function lineIssues(line: Line): { status: RowStatus | null; issues: string[] } {
-	const issues: string[] = [];
+function lineIssues(line: Line): { status: RowStatus | null; issues: Issue[] } {
+	const issues: Issue[] = [];
 	const missing = LINE_FIELD_DEFS.filter((d) => d.required && isBlank(line[d.field])).map(
 		(d) => d.header
 	);
-	if (missing.length) issues.push(`Missing ${missing.join(', ')}`);
+	if (missing.length) issues.push({ text: `Missing ${missing.join(', ')}` });
 	let status: RowStatus | null = missing.length ? 'incomplete' : null;
 	if (line.unitCost !== null && line.price !== null) {
 		const expected = line.unitCost * line.quantity;
 		if (Math.abs(expected - line.price) > 0.01) {
-			issues.push(`Price ${line.price.toFixed(2)} ≠ ${line.quantity} × ${line.unitCost} = ${expected.toFixed(2)}`);
+			issues.push({
+				text: `Price ${line.price.toFixed(2)} ≠ ${line.quantity} × ${line.unitCost} = ${expected.toFixed(2)}`
+			});
 			status ??= 'math';
 		}
 	}
@@ -143,7 +148,7 @@ export function buildReview(vendor: Vendor): ReviewGroup[] {
 						qty: null,
 						line: null,
 						status: 'nobid',
-						issues: [product?.additionalNotes || 'Vendor did not quote this part']
+						issues: [{ text: product?.additionalNotes || 'Vendor did not quote this part', rfq: true }]
 					}
 				]
 			});
@@ -161,13 +166,13 @@ export function buildReview(vendor: Vendor): ReviewGroup[] {
 					qty,
 					line: null,
 					status: 'missing_break',
-					issues: [`Requested qty ${qty} not quoted`]
+					issues: [{ text: `Requested qty ${qty} not quoted`, rfq: true }]
 				};
 			}
 			const { status, issues } = lineIssues(line);
 			const requestedQty = req.qtys.includes(qty);
-			if (!requestedQty) issues.push(`Qty ${qty} was not requested`);
-			if (kind === 'alt') issues.push(`Quoted ${product.partNumber} instead of ${req.pn}`);
+			if (!requestedQty) issues.push({ text: `Qty ${qty} was not requested`, rfq: true });
+			if (kind === 'alt') issues.push({ text: `Quoted ${product.partNumber} instead of ${req.pn}`, rfq: true });
 			return {
 				key: `${key}:${qty}`,
 				qty,
@@ -194,7 +199,7 @@ export function buildReview(vendor: Vendor): ReviewGroup[] {
 					qty: line.quantity,
 					line,
 					status: status ?? 'extra_part',
-					issues: [...issues, `${product.partNumber} was not on the RFQ`]
+					issues: [...issues, { text: `${product.partNumber} was not on the RFQ`, rfq: true }]
 				};
 			})
 		});

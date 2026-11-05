@@ -14,12 +14,13 @@
 		summarize,
 		STATUS_META,
 		TONES,
+		type Issue,
 		type ReviewGroup,
 		type ReviewRow,
 		type RowStatus,
 		type Tone
 	} from '$lib/review';
-	import { findInVendor, focusSource } from '$lib/source.svelte';
+	import { findInRequest, findInVendor, focusSource } from '$lib/source.svelte';
 	import { Check, ChevronRight, Plus, CheckCheck, Info, X, Menu, Minus, Palette } from '@lucide/svelte';
 	import CompactField from './CompactField.svelte';
 
@@ -174,6 +175,12 @@
 		);
 	}
 
+	/** Jump the source pane to what we asked for in the RFQ (for request-related issues). */
+	function showInRfq(g: ReviewGroup, e: MouseEvent) {
+		e.stopPropagation();
+		focusSource(findInRequest(vendor, g.requested?.pn ?? null));
+	}
+
 	function toggleConfirm(key: string) {
 		store.setReviewed(vendor.id, [key], !reviewed.has(key));
 		anchorKey = key;
@@ -288,6 +295,19 @@
 			: NEUTRAL_PILL}"
 		title={meta.help}>{meta.label}</span
 	>
+{/snippet}
+
+{#snippet issueText(issue: Issue, g: ReviewGroup)}
+	{#if issue.rfq}
+		<button
+			type="button"
+			class="inline cursor-pointer text-left underline decoration-dotted decoration-gray-500 underline-offset-2 hover:text-blue-400 hover:decoration-blue-400"
+			title="Show what we requested in the RFQ email"
+			onclick={(e) => showInRfq(g, e)}>{issue.text}</button
+		>
+	{:else}
+		<span>{issue.text}</span>
+	{/if}
 {/snippet}
 
 {#snippet lineCell(def: FieldDef<Line>, line: Line, pid: string, row: ReviewRow, g: ReviewGroup)}
@@ -656,6 +676,25 @@
 											/>
 										{/each}
 									</div>
+									{#if product.lines.length}
+										<p class="mb-1 mt-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Line notes</p>
+										<div class="grid grid-cols-1 gap-y-1.5">
+											{#each product.lines as l (l.id)}
+												{#each LINE_NOTE_DEFS as def (def.field)}
+													<label class="flex items-start gap-2">
+														<span class="w-24 shrink-0 pt-1.5 font-mono text-[11px] text-gray-500">qty {l.quantity}</span>
+														<textarea
+															rows="1"
+															class="h-auto min-h-7 w-full min-w-0 resize-y rounded border border-gray-200 bg-gray-50 px-2 py-1 text-xs text-gray-900 [field-sizing:content] hover:border-gray-300 focus:border-blue-500 focus:outline-none"
+															placeholder="No note"
+															value={(l[def.field] as string) ?? ''}
+															oninput={(e) => updateLine(product.id, l.id, { [def.field]: e.currentTarget.value } as Partial<Line>)}
+														></textarea>
+													</label>
+												{/each}
+											{/each}
+										</div>
+									{/if}
 								</td>
 							</tr>
 						{/if}
@@ -672,7 +711,7 @@
 									{selected ? 'outline-2 -outline-offset-2 outline-blue-500' : 'hover:bg-gray-100/60'}
 									{done && !selected ? 'opacity-50' : ''}"
 								onclick={() => select(g, r)}
-								title={r.issues.join('\n')}
+								title={r.issues.map((i) => i.text).join('\n')}
 							>
 								<td class="px-2 py-1 {colors ? tone.bar : ''}">
 									<button
@@ -700,7 +739,7 @@
 									<td class="px-2 py-1 text-right font-mono tabular-nums text-gray-900">{r.qty ?? '—'}</td>
 									<td colspan={LINE_COLS.length - QTY_IDX - 1} class="px-2 py-1 text-xs text-gray-500">
 										<div class="flex items-center gap-2">
-											<span class="truncate italic">{r.issues[0]}</span>
+											<span class="truncate italic">{@render issueText(r.issues[0], g)}</span>
 											{#if r.status === 'missing_break' && g.product && r.qty !== null}
 												{@const qty = r.qty}
 												<button
@@ -718,27 +757,11 @@
 									</td>
 								{/if}
 							</tr>
-							{#if line && g.product && (selected || LINE_NOTE_DEFS.some((d) => !blank(line[d.field])))}
-								{@const pid = g.product.id}
-								<tr class="text-[11px] {colors ? tone.row : ''} {done && !selected ? 'opacity-50' : ''}">
+							{#if line && selected && r.issues.length}
+								<tr class="text-[11px] {colors ? tone.row : ''}">
 									<td class={colors ? tone.bar : ''}></td>
-									<td colspan={COLSPAN - 1} class="px-2 pb-1.5">
-										{#if selected && r.issues.length}
-											<p class="mb-1 text-gray-700">{r.issues.join(' · ')}</p>
-										{/if}
-										{#each LINE_NOTE_DEFS as def (def.field)}
-											<label class="flex items-start gap-2">
-												<span class="shrink-0 pt-0.5 text-gray-500">{def.header}</span>
-												<textarea
-													rows="1"
-													class="min-h-5 w-full resize-none rounded border border-transparent bg-transparent px-1 py-0.5 italic text-gray-700 [field-sizing:content] hover:border-gray-300 focus:border-blue-500 focus:bg-gray-50 focus:not-italic focus:outline-none"
-													placeholder="Add a note…"
-													value={(line[def.field] as string) ?? ''}
-													onclick={(e) => e.stopPropagation()}
-													oninput={(e) => updateLine(pid, line.id, { [def.field]: e.currentTarget.value } as Partial<Line>)}
-												></textarea>
-											</label>
-										{/each}
+									<td colspan={COLSPAN - 1} class="px-2 pb-1.5 text-gray-700">
+										{#each r.issues as issue, i (i)}{#if i > 0}<span class="text-gray-400"> · </span>{/if}{@render issueText(issue, g)}{/each}
 									</td>
 								</tr>
 							{/if}
