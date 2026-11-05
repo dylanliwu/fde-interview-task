@@ -1,14 +1,34 @@
 <script lang="ts">
 	import type { Vendor } from '$lib/types';
-	import { Mail, Send, Sparkles } from '@lucide/svelte';
+	import { onMount } from 'svelte';
+	import { slide } from 'svelte/transition';
+	import { Mail, Send, Sparkles, ChevronDown } from '@lucide/svelte';
 	import { buildReview, draftFollowUp } from '$lib/review';
 	import { store } from '$lib/store.svelte';
 	import EmailThread from './EmailThread.svelte';
 
 	let { vendor }: { vendor: Vendor } = $props();
 
+	// Reply panel collapses to a one-line bar so the source email/PDF gets the full height.
+	const DRAFT_KEY = 'quoteReview.draftOpen';
+	let draftOpen = $state(false);
+	onMount(() => {
+		try {
+			draftOpen = localStorage.getItem(DRAFT_KEY) === 'open';
+		} catch {}
+	});
+	function setDraftOpen(open: boolean) {
+		draftOpen = open;
+		try {
+			localStorage.setItem(DRAFT_KEY, open ? 'open' : 'closed');
+		} catch {}
+	}
+
+	const draftPreview = $derived(vendor.followUpDraft.replace(/\s+/g, ' ').trim());
+
 	function generateDraft() {
 		updateDraft(draftFollowUp(vendor, buildReview(vendor)));
+		setDraftOpen(true);
 	}
 
 	function updateDraft(value: string) {
@@ -43,14 +63,25 @@
 		<EmailThread emails={vendor.emails} />
 	</div>
 
-	<div class="border-t border-gray-100 bg-gray-50/80 p-4">
-		<div class="mb-2 flex items-center justify-between gap-3">
-			<div class="flex min-w-0 items-center gap-2">
-				<Send class="h-3.5 w-3.5 shrink-0 text-gray-400" />
-				<h3 class="truncate text-xs font-semibold uppercase tracking-wide text-gray-500">
+	<div class="border-t border-gray-100 bg-gray-50/80 px-4 {draftOpen ? 'pb-4 pt-2' : 'py-2'}">
+		<div class="flex items-center justify-between gap-3">
+			<button
+				type="button"
+				class="-ml-1 flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-1 text-left hover:bg-gray-100"
+				aria-expanded={draftOpen}
+				onclick={() => setDraftOpen(!draftOpen)}
+				title={draftOpen ? 'Hide reply draft' : 'Show reply draft'}
+			>
+				<ChevronDown
+					class="h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform {draftOpen ? '' : '-rotate-90'}"
+				/>
+				<h3 class="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500">
 					Reply draft
 				</h3>
-			</div>
+				{#if !draftOpen}
+					<span class="min-w-0 truncate text-xs text-gray-400">{draftPreview || 'Empty'}</span>
+				{/if}
+			</button>
 			<button
 				type="button"
 				class="inline-flex shrink-0 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
@@ -60,21 +91,25 @@
 				<Sparkles class="h-3 w-3" /> Draft from issues
 			</button>
 		</div>
-		<textarea
-			rows="5"
-			class="block w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 font-sans text-[13px] leading-relaxed text-gray-800 shadow-sm transition-colors placeholder:text-gray-400 hover:border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-			value={vendor.followUpDraft}
-			oninput={(e) => updateDraft(e.currentTarget.value)}
-		></textarea>
-		<div class="mt-2 flex justify-end">
-			<button
-				type="button"
-				class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-400"
-				disabled
-			>
-				<Send class="h-3.5 w-3.5" />
-				<span>Send</span>
-			</button>
-		</div>
+		{#if draftOpen}
+			<div transition:slide={{ duration: 150 }}>
+				<textarea
+					rows="6"
+					class="mt-2 block w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 font-sans text-[13px] leading-relaxed text-gray-800 shadow-sm transition-colors placeholder:text-gray-400 hover:border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+					value={vendor.followUpDraft}
+					oninput={(e) => updateDraft(e.currentTarget.value)}
+				></textarea>
+				<div class="mt-2 flex justify-end">
+					<button
+						type="button"
+						class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-400"
+						disabled
+					>
+						<Send class="h-3.5 w-3.5" />
+						<span>Send</span>
+					</button>
+				</div>
+			</div>
+		{/if}
 	</div>
 </section>
