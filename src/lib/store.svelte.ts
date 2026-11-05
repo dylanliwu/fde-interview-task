@@ -70,6 +70,25 @@ function createStore() {
 			product.lines[idx] = { ...product.lines[idx], ...patch };
 			scheduleSave();
 		},
+		addLine(vendorId: string, productId: string, line: Line) {
+			const product = state.vendors
+				.find((v) => v.id === vendorId)
+				?.products.find((p) => p.id === productId);
+			if (!product) return;
+			product.lines = [...product.lines, line].sort((a, b) => a.quantity - b.quantity);
+			scheduleSave();
+		},
+		setReviewed(vendorId: string, keys: string[], reviewed: boolean) {
+			const vendor = state.vendors.find((v) => v.id === vendorId);
+			if (!vendor) return;
+			const next = new Set(vendor.reviewedRows ?? []);
+			for (const k of keys) {
+				if (reviewed) next.add(k);
+				else next.delete(k);
+			}
+			vendor.reviewedRows = [...next];
+			scheduleSave();
+		},
 		flush() {
 			if (saveTimer) {
 				clearTimeout(saveTimer);

@@ -58,6 +58,8 @@ export type Vendor = {
 	additionalNotes: string;
 	followUpDraft: string;
 	submittedAt: string | null;
+	/** Review-row keys a human has confirmed (see review.ts). Optional: older state lacks it. */
+	reviewedRows?: string[];
 	emails: Email[];
 	products: Product[];
 };
