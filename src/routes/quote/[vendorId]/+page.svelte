@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { store } from '$lib/store.svelte';
-	import { ArrowLeft, ArrowRight, Inbox, Loader2, Check, Send, X } from '@lucide/svelte';
+	import { Inbox, Loader2, Check, Send, X } from '@lucide/svelte';
 	import { avatarColor, initials } from '$lib/avatar';
 	import EmailCorrespondence from '$lib/components/EmailCorrespondence.svelte';
 	import QuoteReviewGrid from '$lib/components/QuoteReviewGrid.svelte';
@@ -124,33 +124,11 @@
 							<span>Submitting…</span>
 						{:else}
 							<Send class="h-3.5 w-3.5" />
-							<span>{unconfirmed > 0 ? `Submit (${unconfirmed} left)` : 'Submit'}</span>
+							<span>Submit</span>
 						{/if}
 					</button>
 				{/if}
 
-				<nav class="flex items-center" aria-label="Quote navigation">
-					<a
-						href={data.prevId ? `/quote/${data.prevId}` : undefined}
-						aria-disabled={!data.prevId}
-						aria-label="Previous vendor"
-						class="inline-flex h-8 w-8 items-center justify-center rounded-l-lg border border-gray-200 transition-colors {data.prevId
-							? 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-							: 'pointer-events-none text-gray-300'}"
-					>
-						<ArrowLeft class="h-4 w-4" />
-					</a>
-					<a
-						href={data.nextId ? `/quote/${data.nextId}` : undefined}
-						aria-disabled={!data.nextId}
-						aria-label="Next vendor"
-						class="-ml-px inline-flex h-8 w-8 items-center justify-center rounded-r-lg border border-gray-200 transition-colors {data.nextId
-							? 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-							: 'pointer-events-none text-gray-300'}"
-					>
-						<ArrowRight class="h-4 w-4" />
-					</a>
-				</nav>
 			</div>
 		</div>
 
