@@ -23,27 +23,63 @@ export type RowStatus =
 	| 'extra_part'
 	| 'ok';
 
-export const STATUS_META: Record<RowStatus, { label: string; cls: string; attention: boolean }> = {
-	nobid: { label: 'No bid', cls: 'bg-rose-50 text-rose-700 border-rose-200', attention: true },
+/** Four colour groups so the grid reads at a glance; each status belongs to one. */
+export type Tone = 'ok' | 'diff' | 'extra' | 'bad';
+
+export const TONES: Record<Tone, { title: string; help: string }> = {
+	ok: { title: 'Matches request', help: 'Same part and quantity we asked for. Check the numbers against the highlighted source, then confirm.' },
+	diff: { title: 'Differs from request', help: 'The vendor changed something we asked for. Decide whether it is acceptable.' },
+	extra: { title: 'Not requested', help: 'The vendor added something we did not ask for. Keep it or ignore it.' },
+	bad: { title: 'Missing or wrong data', help: 'Something needs fixing before this row can be trusted.' }
+};
+
+export const STATUS_META: Record<
+	RowStatus,
+	{ label: string; tone: Tone; attention: boolean; help: string }
+> = {
+	ok: { label: 'Match', tone: 'ok', attention: false, help: 'Quoted exactly as requested.' },
+	alt: {
+		label: 'Different PN',
+		tone: 'diff',
+		attention: true,
+		help: 'Vendor quoted a substitute part number (same NSN) instead of the one requested. Confirm the substitute is acceptable.'
+	},
 	missing_break: {
-		label: 'Missing break',
-		cls: 'bg-amber-50 text-amber-800 border-amber-200',
-		attention: true
+		label: 'Qty not quoted',
+		tone: 'diff',
+		attention: true,
+		help: 'We asked for this quantity ("price break") but got no price for it. If it is in the email, click Add line; otherwise ask the vendor via "Draft from issues".'
 	},
-	incomplete: { label: 'Missing value', cls: 'bg-rose-50 text-rose-700 border-rose-200', attention: true },
-	math: { label: 'Price ≠ qty×unit', cls: 'bg-rose-50 text-rose-700 border-rose-200', attention: true },
 	extra_break: {
-		label: 'Unrequested qty',
-		cls: 'bg-violet-50 text-violet-700 border-violet-200',
-		attention: true
+		label: 'Extra qty',
+		tone: 'extra',
+		attention: true,
+		help: 'Vendor priced a quantity we did not ask for.'
 	},
-	alt: { label: 'Alternate PN', cls: 'bg-amber-50 text-amber-800 border-amber-200', attention: true },
 	extra_part: {
-		label: 'Unrequested part',
-		cls: 'bg-violet-50 text-violet-700 border-violet-200',
-		attention: true
+		label: 'Extra part',
+		tone: 'extra',
+		attention: true,
+		help: 'Vendor added a part that was not on the RFQ.'
 	},
-	ok: { label: 'Match', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', attention: false }
+	nobid: {
+		label: 'Not quoted',
+		tone: 'bad',
+		attention: true,
+		help: 'Vendor did not bid on this part at all.'
+	},
+	incomplete: {
+		label: 'Missing data',
+		tone: 'bad',
+		attention: true,
+		help: 'A required value (unit cost, price, currency, lead time) is empty, usually because extraction missed it. Find it in the highlighted text and fill it in.'
+	},
+	math: {
+		label: 'Price mismatch',
+		tone: 'bad',
+		attention: true,
+		help: 'Extended price does not equal qty × unit cost. Check the source for a typo.'
+	}
 };
 
 export type ReviewRow = {

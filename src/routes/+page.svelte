@@ -3,6 +3,7 @@
 	import type { Vendor } from '$lib/types';
 	import { Inbox, ChevronRight, Mail, FileText, Check } from '@lucide/svelte';
 	import { avatarColor, avatarHoverColor, initials } from '$lib/avatar';
+	import { buildReview, summarize } from '$lib/review';
 
 	let { data } = $props();
 
@@ -11,9 +12,8 @@
 	const vendors = $derived(store.vendors);
 
 	function lineCounts(vendor: Vendor) {
-		const lines = vendor.products.flatMap((p) => p.lines);
-		const priced = lines.filter((l) => l.price !== null).length;
-		return { priced, total: lines.length };
+		const s = summarize(buildReview(vendor), vendor.reviewedRows ?? []);
+		return { confirmed: s.confirmed, total: s.total, attention: s.attention };
 	}
 
 	function lastEmail(vendor: Vendor) {
@@ -30,7 +30,7 @@
 	}
 </script>
 
-<div class="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+<div class="min-h-screen bg-gradient-to-b from-gray-50 to-gray-50">
 	<div class="mx-auto max-w-4xl px-6 pb-16 pt-12">
 		<header class="mb-10">
 			<div class="mb-1 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-gray-400">
@@ -57,7 +57,7 @@
 			{#each vendors as vendor (vendor.id)}
 				{@const counts = lineCounts(vendor)}
 				{@const email = lastEmail(vendor)}
-				{@const complete = counts.priced === counts.total}
+				{@const complete = counts.confirmed === counts.total}
 				{@const avatarBase = avatarColor(vendor.name)}
 				{@const avatarHover = avatarHoverColor(vendor.name)}
 				<li>
@@ -100,8 +100,6 @@
 										class="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700"
 									>
 										{vendor.products.length} products
-										<span class="text-gray-300">·</span>
-										{counts.total} lines
 									</span>
 
 									<span
@@ -109,7 +107,8 @@
 											? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
 											: 'border border-amber-200 bg-amber-50 text-amber-700'}"
 									>
-										{counts.priced}/{counts.total} priced
+										{counts.confirmed}/{counts.total} confirmed{#if counts.attention}
+											· {counts.attention} need attention{/if}
 									</span>
 
 									{#if email.attachments.length}
