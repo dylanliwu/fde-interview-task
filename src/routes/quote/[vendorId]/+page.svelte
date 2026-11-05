@@ -5,13 +5,18 @@
 	import { ArrowLeft, ArrowRight, Inbox, Loader2, Check, Send, X } from '@lucide/svelte';
 	import { avatarColor, initials } from '$lib/avatar';
 	import EmailCorrespondence from '$lib/components/EmailCorrespondence.svelte';
-	import VendorProcessingForm from '$lib/components/VendorProcessingForm.svelte';
+	import QuoteReviewGrid from '$lib/components/QuoteReviewGrid.svelte';
+	import { buildReview, summarize } from '$lib/review';
 
 	let { data } = $props();
 
 	$effect(() => store.init(data.state));
 
 	const vendor = $derived(store.getVendor(data.vendorId));
+	const review = $derived(
+		vendor ? summarize(buildReview(vendor), vendor.reviewedRows ?? []) : null
+	);
+	const unconfirmed = $derived(review ? review.total - review.confirmed : 0);
 
 	let submitting = $state(false);
 	let submitError = $state<string | null>(null);
@@ -125,14 +130,15 @@
 						type="button"
 						class="inline-flex items-center gap-1.5 rounded-md border border-gray-900 bg-gray-900 px-2.5 py-1 text-xs font-medium text-white shadow-sm transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
 						onclick={submit}
-						disabled={submitting || !vendor}
+						disabled={submitting || !vendor || unconfirmed > 0}
+						title={unconfirmed > 0 ? `${unconfirmed} rows still need confirming` : 'Submit reviewed quote'}
 					>
 						{#if submitting}
 							<Loader2 class="h-3.5 w-3.5 animate-spin" />
 							<span>Submitting…</span>
 						{:else}
 							<Send class="h-3.5 w-3.5" />
-							<span>Submit</span>
+							<span>{unconfirmed > 0 ? `Submit (${unconfirmed} left)` : 'Submit'}</span>
 						{/if}
 					</button>
 				{/if}
@@ -184,10 +190,10 @@
 
 	{#if vendor}
 		<main
-			class="grid flex-1 grid-cols-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,7fr)_minmax(360px,5fr)]"
+			class="grid flex-1 grid-cols-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,5fr)_minmax(520px,7fr)]"
 		>
 			<EmailCorrespondence {vendor} />
-			<VendorProcessingForm {vendor} />
+			<QuoteReviewGrid {vendor} />
 		</main>
 	{:else}
 		<main class="flex flex-1 items-center justify-center text-sm text-gray-500">
