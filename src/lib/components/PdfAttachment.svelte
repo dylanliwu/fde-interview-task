@@ -1,10 +1,19 @@
 <script lang="ts">
 	import type { EmailAttachment } from '$lib/types';
 	import { FileText, ChevronDown } from '@lucide/svelte';
-	import { slide } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 
-	let { attachment }: { attachment: EmailAttachment } = $props();
-	let open = $state(false);
+	import HighlightedText from './HighlightedText.svelte';
+	import { sourceFocus } from '$lib/source.svelte';
+	import { emailColor } from '$lib/emailColors.svelte';
+
+	let { attachment, emailId }: { attachment: EmailAttachment; emailId: string } = $props();
+	let open = $state(true);
+
+	$effect(() => {
+		void sourceFocus.nonce; // re-open on each new focus, but never fight a manual collapse
+		if (sourceFocus.match?.attachmentId === attachment.id) open = true;
+	});
 </script>
 
 <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -32,10 +41,10 @@
 	</button>
 
 	{#if open}
-		<div transition:slide={{ duration: 180 }} class="space-y-3 border-t border-gray-100 bg-gray-100/50 p-3">
+		<div in:fade={{ duration: 120 }} class="space-y-3 border-t border-gray-100 bg-gray-100/50 p-3">
 			{#each attachment.pages as page, i (i)}
 				<article
-					class="overflow-hidden rounded-md border border-gray-200 bg-[#fdfcf7] shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_-2px_rgba(0,0,0,0.04)]"
+					class="overflow-hidden rounded-md border border-gray-200 bg-gray-50"
 				>
 					<div
 						class="flex items-center justify-between border-b border-gray-200/70 bg-white/70 px-3 py-1.5"
@@ -46,8 +55,12 @@
 							Page {i + 1} of {attachment.pages.length}
 						</span>
 					</div>
-					<pre
-						class="overflow-x-auto whitespace-pre p-4 font-mono text-[11px] leading-relaxed text-gray-900">{page}</pre>
+					<HighlightedText
+						text={page}
+						sourceId={`${emailId}:${attachment.id}:${i}`}
+						color={emailColor(emailId)}
+						class="overflow-x-auto whitespace-pre p-4 font-mono text-[11px] leading-relaxed text-gray-900"
+					/>
 				</article>
 			{/each}
 		</div>

@@ -70,6 +70,37 @@ function createStore() {
 			product.lines[idx] = { ...product.lines[idx], ...patch };
 			scheduleSave();
 		},
+		addLine(vendorId: string, productId: string, line: Line) {
+			const product = state.vendors
+				.find((v) => v.id === vendorId)
+				?.products.find((p) => p.id === productId);
+			if (!product) return;
+			product.lines = [...product.lines, line].sort((a, b) => a.quantity - b.quantity);
+			scheduleSave();
+		},
+		/** Remove a line so it isn't submitted. Returns the removed line (for undo). */
+		removeLine(vendorId: string, productId: string, lineId: string): Line | null {
+			const product = state.vendors
+				.find((v) => v.id === vendorId)
+				?.products.find((p) => p.id === productId);
+			const line = product?.lines.find((l) => l.id === lineId);
+			if (!product || !line) return null;
+			const removed = $state.snapshot(line) as Line;
+			product.lines = product.lines.filter((l) => l.id !== lineId);
+			scheduleSave();
+			return removed;
+		},
+		setReviewed(vendorId: string, keys: string[], reviewed: boolean) {
+			const vendor = state.vendors.find((v) => v.id === vendorId);
+			if (!vendor) return;
+			const next = new Set(vendor.reviewedRows ?? []);
+			for (const k of keys) {
+				if (reviewed) next.add(k);
+				else next.delete(k);
+			}
+			vendor.reviewedRows = [...next];
+			scheduleSave();
+		},
 		flush() {
 			if (saveTimer) {
 				clearTimeout(saveTimer);
@@ -77,16 +108,25 @@ function createStore() {
 			}
 			return persist();
 		},
-		async submitVendor(vendorId: string): Promise<void> {
+		async submitVendor(vendorId: string, excludeLineIds: string[] = []): Promise<void> {
 			await this.flush();
-			const res = await fetch(`/api/quote/${vendorId}/submit`, { method: 'POST' });
+			const res = await fetch(`/api/quote/${vendorId}/submit`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ excludeLineIds })
+			});
 			if (!res.ok) {
 				const body = (await res.json().catch(() => null)) as { message?: string } | null;
 				throw new Error(body?.message ?? `submit failed: ${res.status}`);
 			}
-			const { vendor } = (await res.json()) as { vendor: { submittedAt: string } };
+			const { vendor } = (await res.json()) as {
+				vendor: { submittedAt: string; excludedLineIds?: string[] };
+			};
 			const local = state.vendors.find((v) => v.id === vendorId);
-			if (local) local.submittedAt = vendor.submittedAt;
+			if (local) {
+				local.submittedAt = vendor.submittedAt;
+				local.excludedLineIds = vendor.excludedLineIds;
+			}
 		}
 	};
 }

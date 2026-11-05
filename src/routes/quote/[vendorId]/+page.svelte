@@ -2,26 +2,56 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { store } from '$lib/store.svelte';
-	import { ArrowLeft, ArrowRight, Inbox, Loader2, Check, Send, X } from '@lucide/svelte';
+	import { Inbox, Loader2, Check, Send, X } from '@lucide/svelte';
 	import { avatarColor, initials } from '$lib/avatar';
 	import EmailCorrespondence from '$lib/components/EmailCorrespondence.svelte';
-	import VendorProcessingForm from '$lib/components/VendorProcessingForm.svelte';
+	import QuoteReviewGrid from '$lib/components/QuoteReviewGrid.svelte';
+	import { buildReview, summarize } from '$lib/review';
+	import { LINE_FIELD_DEFS } from '$lib/fields';
+	import { layout, loadLayout, saveLayout, clampPct, EMAIL_DEFAULT } from '$lib/layout.svelte';
 
 	let { data } = $props();
 
 	$effect(() => store.init(data.state));
 
 	const vendor = $derived(store.getVendor(data.vendorId));
+	const review = $derived(
+		vendor ? summarize(buildReview(vendor), vendor.reviewedRows ?? []) : null
+	);
+	const unconfirmed = $derived(review ? review.total - review.confirmed : 0);
 
 	let submitting = $state(false);
 	let submitError = $state<string | null>(null);
+	let confirmSkip = $state(false);
 
-	async function submit() {
+	// Lines still missing a required value: submitting asks to leave these out.
+	const incompleteLines = $derived(
+		vendor
+			? vendor.products.flatMap((p) =>
+					p.lines
+						.filter((l) =>
+							LINE_FIELD_DEFS.some(
+								(d) => d.required && (l[d.field] === null || l[d.field] === '' || l[d.field] === undefined)
+							)
+						)
+						.map((l) => ({ id: l.id, pn: p.partNumber, qty: l.quantity }))
+				)
+			: []
+	);
+
+	function submit() {
 		if (!vendor || submitting) return;
+		if (incompleteLines.length) confirmSkip = true;
+		else void doSubmit([]);
+	}
+
+	async function doSubmit(excludeLineIds: string[]) {
+		if (!vendor || submitting) return;
+		confirmSkip = false;
 		submitError = null;
 		submitting = true;
 		try {
-			await store.submitVendor(vendor.id);
+			await store.submitVendor(vendor.id, excludeLineIds);
 		} catch (err) {
 			submitError = err instanceof Error ? err.message : 'submit failed';
 		} finally {
@@ -38,7 +68,32 @@
 		);
 	}
 
+	// --- resizable split: drag the divider; double-click resets ---
+	let mainEl = $state<HTMLElement | null>(null);
+	let dragging = $state(false);
+
+	function startDrag(e: PointerEvent) {
+		dragging = true;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	}
+	function onDrag(e: PointerEvent) {
+		if (!dragging || !mainEl) return;
+		const rect = mainEl.getBoundingClientRect();
+		const pct = ((e.clientX - rect.left) / rect.width) * 100;
+		layout.emailPct = clampPct(layout.swapped ? 100 - pct : pct);
+	}
+	function endDrag() {
+		if (!dragging) return;
+		dragging = false;
+		saveLayout();
+	}
+	function resetSplit() {
+		layout.emailPct = EMAIL_DEFAULT;
+		saveLayout();
+	}
+
 	onMount(() => {
+		loadLayout();
 		function onKey(e: KeyboardEvent) {
 			const target = e.target as HTMLElement | null;
 			if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
@@ -48,6 +103,8 @@
 			} else if (e.key === 'ArrowRight' && data.nextId) {
 				e.preventDefault();
 				void goto(`/quote/${data.nextId}`);
+			} else if (e.key === 'Escape' && confirmSkip) {
+				confirmSkip = false;
 			} else if (e.key === 'Escape') {
 				void goto('/');
 			}
@@ -99,20 +156,6 @@
 			</div>
 
 			<div class="flex items-center gap-3">
-				<div
-					class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium {store.isSaving
-						? 'text-gray-500'
-						: 'text-emerald-700'}"
-				>
-					{#if store.isSaving}
-						<Loader2 class="h-3 w-3 animate-spin text-gray-400" />
-						<span>Saving…</span>
-					{:else}
-						<Check class="h-3 w-3 text-emerald-500" strokeWidth={3} />
-						<span>Saved</span>
-					{/if}
-				</div>
-
 				{#if vendor?.submittedAt}
 					<div
 						class="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
@@ -125,7 +168,8 @@
 						type="button"
 						class="inline-flex items-center gap-1.5 rounded-md border border-gray-900 bg-gray-900 px-2.5 py-1 text-xs font-medium text-white shadow-sm transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
 						onclick={submit}
-						disabled={submitting || !vendor}
+						disabled={submitting || !vendor || unconfirmed > 0}
+						title={unconfirmed > 0 ? `${unconfirmed} rows still need confirming` : 'Submit reviewed quote'}
 					>
 						{#if submitting}
 							<Loader2 class="h-3.5 w-3.5 animate-spin" />
@@ -137,28 +181,6 @@
 					</button>
 				{/if}
 
-				<nav class="flex items-center" aria-label="Quote navigation">
-					<a
-						href={data.prevId ? `/quote/${data.prevId}` : undefined}
-						aria-disabled={!data.prevId}
-						aria-label="Previous vendor"
-						class="inline-flex h-8 w-8 items-center justify-center rounded-l-lg border border-gray-200 transition-colors {data.prevId
-							? 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-							: 'pointer-events-none text-gray-300'}"
-					>
-						<ArrowLeft class="h-4 w-4" />
-					</a>
-					<a
-						href={data.nextId ? `/quote/${data.nextId}` : undefined}
-						aria-disabled={!data.nextId}
-						aria-label="Next vendor"
-						class="-ml-px inline-flex h-8 w-8 items-center justify-center rounded-r-lg border border-gray-200 transition-colors {data.nextId
-							? 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-							: 'pointer-events-none text-gray-300'}"
-					>
-						<ArrowRight class="h-4 w-4" />
-					</a>
-				</nav>
 			</div>
 		</div>
 
@@ -184,14 +206,75 @@
 
 	{#if vendor}
 		<main
-			class="grid flex-1 grid-cols-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,7fr)_minmax(360px,5fr)]"
+			bind:this={mainEl}
+			class="flex flex-1 flex-col gap-4 overflow-hidden p-4 lg:flex-row lg:gap-0 {dragging
+				? 'cursor-col-resize select-none'
+				: ''}"
+			style="--email-w: {layout.emailPct}%"
 		>
-			<EmailCorrespondence {vendor} />
-			<VendorProcessingForm {vendor} />
+			<div class="min-h-0 min-w-0 flex-1 lg:w-[var(--email-w)] lg:flex-none {layout.swapped ? 'lg:order-3' : 'lg:order-1'}">
+				<EmailCorrespondence {vendor} />
+			</div>
+			<div
+				role="separator"
+				aria-orientation="vertical"
+				aria-label="Resize panels (double-click to reset)"
+				title="Drag to resize · double-click to reset"
+				class="group hidden w-4 shrink-0 cursor-col-resize items-center justify-center lg:order-2 lg:flex"
+				onpointerdown={startDrag}
+				onpointermove={onDrag}
+				onpointerup={endDrag}
+				onpointercancel={endDrag}
+				ondblclick={resetSplit}
+			>
+				<div
+					class="h-12 w-1 rounded-full transition-colors {dragging
+						? 'bg-blue-500'
+						: 'bg-gray-200 group-hover:bg-gray-400'}"
+				></div>
+			</div>
+			<div class="min-h-0 min-w-0 flex-1 {layout.swapped ? 'lg:order-1' : 'lg:order-3'}">
+				<QuoteReviewGrid {vendor} />
+			</div>
 		</main>
 	{:else}
 		<main class="flex flex-1 items-center justify-center text-sm text-gray-500">
 			Vendor not found.
 		</main>
+	{/if}
+	{#if confirmSkip}
+		<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="presentation">
+			<div
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="skip-title"
+				class="w-full max-w-md rounded-xl border border-gray-200 bg-white p-5 shadow-2xl"
+			>
+				<h2 id="skip-title" class="text-sm font-semibold text-gray-900">
+					Submit without {incompleteLines.length} incomplete line{incompleteLines.length === 1 ? '' : 's'}?
+				</h2>
+				<p class="mt-1 text-xs leading-relaxed text-gray-600">
+					These lines are missing a required value (unit cost, price, currency or lead time). They'll be
+					left out of the submission. Nothing is deleted, and you can still fill them in later.
+				</p>
+				<ul class="mt-3 max-h-40 space-y-1 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-2 font-mono text-xs text-gray-700">
+					{#each incompleteLines as l (l.id)}
+						<li>{l.pn} · qty {l.qty}</li>
+					{/each}
+				</ul>
+				<div class="mt-4 flex justify-end gap-2">
+					<button
+						type="button"
+						class="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-800 hover:bg-gray-100"
+						onclick={() => (confirmSkip = false)}>Go back and fill in</button
+					>
+					<button
+						type="button"
+						class="rounded-md border border-gray-900 bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-50 hover:bg-gray-800"
+						onclick={() => doSubmit(incompleteLines.map((l) => l.id))}>Submit without them</button
+					>
+				</div>
+			</div>
+		</div>
 	{/if}
 </div>

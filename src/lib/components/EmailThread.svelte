@@ -1,17 +1,44 @@
 <script lang="ts">
 	import type { Email } from '$lib/types';
 	import { Paperclip, ChevronDown, Mail } from '@lucide/svelte';
-	import { slide } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
+	import { untrack } from 'svelte';
 	import { avatarColor, initials } from '$lib/avatar';
 	import PdfAttachment from './PdfAttachment.svelte';
+	import HighlightedText from './HighlightedText.svelte';
+	import { sourceFocus } from '$lib/source.svelte';
+	import {
+		EMAIL_COLORS,
+		EMAIL_COLOR_KEYS,
+		emailColor,
+		setEmailColor
+	} from '$lib/emailColors.svelte';
+
+	/** Which email's colour picker is open. */
+	let pickerFor = $state<string | null>(null);
 
 	let { emails }: { emails: Email[] } = $props();
 
 	let openIds = $state(new Set<string>());
 
+	const threadKey = $derived(emails.map((e) => e.id).join('|'));
 	$effect(() => {
-		const last = emails[emails.length - 1];
-		openIds = new Set(last ? [last.id] : []);
+		void threadKey;
+		untrack(() => {
+			const last = emails[emails.length - 1];
+			openIds = new Set(last ? [last.id] : []);
+		});
+	});
+
+	// Open whichever email holds the focused source match.
+	// Only re-run on a new focus event — not when openIds changes — so the user can still
+	// collapse an email that holds the current highlight.
+	$effect(() => {
+		void sourceFocus.nonce;
+		const id = sourceFocus.match?.emailId;
+		untrack(() => {
+			if (id && !openIds.has(id)) openIds = new Set([...openIds, id]);
+		});
 	});
 
 	function toggle(id: string) {
@@ -38,10 +65,12 @@
 <ol class="divide-y divide-gray-100">
 	{#each emails as email (email.id)}
 		{@const open = openIds.has(email.id)}
-		<li>
+		{@const color = emailColor(email.id)}
+		<li class={EMAIL_COLORS[color].edge}>
+			<div class="flex items-start">
 			<button
 				type="button"
-				class="group flex w-full items-start gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-50/80"
+				class="group flex min-w-0 flex-1 items-start gap-3 py-4 pl-5 pr-2 text-left transition-colors hover:bg-gray-50/80"
 				onclick={() => toggle(email.id)}
 			>
 				<div
@@ -80,9 +109,55 @@
 				/>
 			</button>
 
+			<!-- Highlight colour for this email -->
+			<div class="relative shrink-0 pr-4 pt-[18px]">
+				<button
+					type="button"
+					class="block h-4 w-4 rounded-full ring-offset-2 ring-offset-white hover:ring-2 hover:ring-gray-400 {EMAIL_COLORS[color].swatch}"
+					aria-label="Highlight colour for this email ({EMAIL_COLORS[color].label})"
+					title="Highlight colour: {EMAIL_COLORS[color].label}"
+					aria-expanded={pickerFor === email.id}
+					onclick={() => (pickerFor = pickerFor === email.id ? null : email.id)}
+				></button>
+				{#if pickerFor === email.id}
+					<button
+						type="button"
+						class="fixed inset-0 z-20 cursor-default"
+						aria-label="Close colour picker"
+						tabindex="-1"
+						onclick={() => (pickerFor = null)}
+					></button>
+					<div
+						class="absolute right-2 top-full z-30 mt-1.5 w-max rounded-lg border border-gray-200 bg-white p-2 shadow-2xl shadow-black/60"
+					>
+						<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Highlight colour</p>
+						<div class="flex items-center gap-1.5">
+							{#each EMAIL_COLOR_KEYS as c (c)}
+								<button
+									type="button"
+									class="flex h-6 w-6 items-center justify-center rounded-full ring-offset-2 ring-offset-white {EMAIL_COLORS[c].swatch} {color === c
+										? 'ring-2 ring-gray-900'
+										: 'hover:ring-2 hover:ring-gray-400'}"
+									aria-label={EMAIL_COLORS[c].label}
+									title={EMAIL_COLORS[c].label}
+									aria-pressed={color === c}
+									onclick={() => {
+										setEmailColor(email.id, c);
+										pickerFor = null;
+									}}
+								>
+									{#if c === 'none'}<span class="text-[10px] text-gray-500">∅</span>{/if}
+								</button>
+							{/each}
+						</div>
+					</div>
+				{/if}
+			</div>
+			</div>
+
 			{#if open}
 				<div
-					transition:slide={{ duration: 180 }}
+					in:fade={{ duration: 120 }}
 					class="border-t border-gray-100 bg-gray-50/60 px-5 py-4"
 				>
 					<dl class="mb-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px]">
@@ -94,13 +169,17 @@
 						<dd class="text-gray-700">{shortDate(email.date)}</dd>
 					</dl>
 
-					<pre
-						class="whitespace-pre-wrap break-words font-sans text-[13px] leading-relaxed text-gray-800">{email.body}</pre>
+					<HighlightedText
+						text={email.body}
+						sourceId={email.id}
+						{color}
+						class="whitespace-pre-wrap break-words font-sans text-[13px] leading-relaxed text-gray-800"
+					/>
 
 					{#if email.attachments.length}
 						<div class="mt-4 space-y-3">
 							{#each email.attachments as attachment (attachment.id)}
-								<PdfAttachment {attachment} />
+								<PdfAttachment {attachment} emailId={email.id} />
 							{/each}
 						</div>
 					{/if}

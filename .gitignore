@@ -10,3 +10,4 @@ vite.config.ts.timestamp-*
 .DS_Store
 data/state.json
 bun.lock
+.idea/

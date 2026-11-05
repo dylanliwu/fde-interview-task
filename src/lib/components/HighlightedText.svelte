@@ -1,0 +1,52 @@
+<script lang="ts">
+	import { tick } from 'svelte';
+	import { sourceFocus } from '$lib/source.svelte';
+	import { EMAIL_COLORS, type EmailColor } from '$lib/emailColors.svelte';
+
+	let {
+		text,
+		sourceId,
+		color = 'none',
+		class: cls = ''
+	}: { text: string; sourceId: string; color?: EmailColor; class?: string } = $props();
+
+	const hl = $derived(EMAIL_COLORS[color]);
+
+	let el = $state<HTMLElement | null>(null);
+
+	const segments = $derived.by(() => {
+		const m = sourceFocus.match;
+		if (!m || m.sourceId !== sourceId) return [{ t: text, k: 'none' as const }];
+		const [bs, be] = m.block;
+		const [ls, le] = m.line ?? [be, be];
+		return [
+			{ t: text.slice(0, bs), k: 'none' as const },
+			{ t: text.slice(bs, ls), k: 'block' as const },
+			{ t: text.slice(ls, le), k: 'line' as const },
+			{ t: text.slice(le, be), k: 'block' as const },
+			{ t: text.slice(be), k: 'none' as const }
+		].filter((s) => s.t);
+	});
+
+	$effect(() => {
+		void sourceFocus.nonce;
+		if (sourceFocus.match?.sourceId !== sourceId) return;
+		// Wait for the DOM update plus one frame so a just-opened email/PDF has its final
+		// layout before we scroll — scrolling mid-layout is what made it jump.
+		let raf = 0;
+		void tick().then(() => {
+			raf = requestAnimationFrame(() => {
+				const target = el?.querySelector('[data-hl=line]') ?? el?.querySelector('[data-hl=block]');
+				target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+			});
+		});
+		return () => cancelAnimationFrame(raf);
+	});
+</script>
+
+<pre bind:this={el} class={cls}>{#each segments as s, i (i)}{#if s.k === 'none'}{s.t}{:else if s.k === 'block'}<mark
+				data-hl="block"
+				class="rounded-sm text-inherit {hl.block}">{s.t}</mark
+			>{:else}<mark data-hl="line" class="rounded-sm text-inherit {hl.line}"
+				>{s.t}</mark
+			>{/if}{/each}</pre>

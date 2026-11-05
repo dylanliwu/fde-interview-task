@@ -1,10 +1,33 @@
 <script lang="ts">
 	import type { Vendor } from '$lib/types';
-	import { Mail, Send } from '@lucide/svelte';
+	import { onMount } from 'svelte';
+	import { slide } from 'svelte/transition';
+	import { Mail, Send, Sparkles, ChevronDown } from '@lucide/svelte';
+	import { buildReview, draftFollowUp } from '$lib/review';
 	import { store } from '$lib/store.svelte';
 	import EmailThread from './EmailThread.svelte';
 
 	let { vendor }: { vendor: Vendor } = $props();
+
+	// Reply panel collapses to a one-line bar so the source email/PDF gets the full height.
+	const DRAFT_KEY = 'quoteReview.draftOpen';
+	let draftOpen = $state(false);
+	onMount(() => {
+		try {
+			draftOpen = localStorage.getItem(DRAFT_KEY) === 'open';
+		} catch {}
+	});
+	function setDraftOpen(open: boolean) {
+		draftOpen = open;
+		try {
+			localStorage.setItem(DRAFT_KEY, open ? 'open' : 'closed');
+		} catch {}
+	}
+
+	function generateDraft() {
+		updateDraft(draftFollowUp(vendor, buildReview(vendor)));
+		setDraftOpen(true);
+	}
 
 	function updateDraft(value: string) {
 		store.updateVendor(vendor.id, { followUpDraft: value });
@@ -14,55 +37,61 @@
 <section
 	class="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm"
 >
-	<header class="flex items-center gap-3 border-b border-gray-100 px-5 py-4">
-		<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50">
-			<Mail class="h-4 w-4 text-blue-600" />
-		</div>
-		<div class="min-w-0 flex-1">
-			<div class="flex items-baseline justify-between gap-2">
-				<h2 class="truncate text-sm font-semibold tracking-tight text-gray-900">
-					Correspondence
-				</h2>
-				<span class="shrink-0 font-mono text-[11px] text-gray-400">
-					{vendor.emails.length} message{vendor.emails.length === 1 ? '' : 's'}
-				</span>
-			</div>
-			<p class="truncate text-xs text-gray-500">
-				{vendor.contactName} ·
-				<span class="font-mono text-gray-400">{vendor.contactEmail}</span>
-			</p>
-		</div>
+	<header class="flex items-center gap-2 border-b border-gray-100 px-4 py-2 text-xs">
+		<Mail class="h-3.5 w-3.5 shrink-0 text-gray-400" />
+		<span class="font-semibold text-gray-900">Correspondence</span>
+		<span class="truncate text-gray-500">{vendor.contactName} · <span class="font-mono">{vendor.contactEmail}</span></span>
+		<span class="ml-auto shrink-0 font-mono text-[11px] text-gray-400">{vendor.emails.length} msg</span>
 	</header>
 
 	<div class="min-h-0 flex-1 overflow-y-auto">
 		<EmailThread emails={vendor.emails} />
 	</div>
 
-	<div class="border-t border-gray-100 bg-gray-50/80 p-4">
-		<div class="mb-2 flex items-center justify-between gap-3">
-			<div class="flex min-w-0 items-center gap-2">
-				<Send class="h-3.5 w-3.5 shrink-0 text-gray-400" />
-				<h3 class="truncate text-xs font-semibold uppercase tracking-wide text-gray-500">
-					Reply draft
-				</h3>
-			</div>
-			<span class="shrink-0 text-[11px] text-gray-400">not sent</span>
-		</div>
-		<textarea
-			rows="7"
-			class="block w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 font-sans text-[13px] leading-relaxed text-gray-800 shadow-sm transition-colors placeholder:text-gray-400 hover:border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-			value={vendor.followUpDraft}
-			oninput={(e) => updateDraft(e.currentTarget.value)}
-		></textarea>
-		<div class="mt-2 flex justify-end">
+	<div class="border-t border-gray-100 bg-gray-50/80 px-4 {draftOpen ? 'pb-4 pt-2' : 'py-2'}">
+		<div class="flex items-center justify-between gap-3">
 			<button
 				type="button"
-				class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-400"
-				disabled
+				class="-ml-1 flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-1 text-left hover:bg-gray-100"
+				aria-expanded={draftOpen}
+				onclick={() => setDraftOpen(!draftOpen)}
+				title={draftOpen ? 'Hide reply draft' : 'Show reply draft'}
 			>
-				<Send class="h-3.5 w-3.5" />
-				<span>Send</span>
+				<ChevronDown
+					class="h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform {draftOpen ? '' : '-rotate-90'}"
+				/>
+				<h3 class="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500">
+					Reply draft
+				</h3>
+			</button>
+			<button
+				type="button"
+				class="inline-flex shrink-0 items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+				onclick={generateDraft}
+				title="Rewrite the draft from the issues found in review"
+			>
+				<Sparkles class="h-3 w-3" /> Draft from issues
 			</button>
 		</div>
+		{#if draftOpen}
+			<div transition:slide={{ duration: 150 }}>
+				<textarea
+					rows="6"
+					class="mt-2 block w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 font-sans text-[13px] leading-relaxed text-gray-800 shadow-sm transition-colors placeholder:text-gray-400 hover:border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+					value={vendor.followUpDraft}
+					oninput={(e) => updateDraft(e.currentTarget.value)}
+				></textarea>
+				<div class="mt-2 flex justify-end">
+					<button
+						type="button"
+						class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-400"
+						disabled
+					>
+						<Send class="h-3.5 w-3.5" />
+						<span>Send</span>
+					</button>
+				</div>
+			</div>
+		{/if}
 	</div>
 </section>
