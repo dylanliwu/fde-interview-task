@@ -58,7 +58,7 @@ The statuses map to four colours (matches / differs / not requested / missing or
 
 - **The persistence contract.** `data/state.json` and `PUT /api/state` are as they were. Review progress is one optional field, `Vendor.reviewedRows`, which travels through the existing PUT unchanged. Older state files still load.
 - **The RFQ isn't stored in state.** It's the buyer's own reference data, not something the reviewer edits, and adding it to the fixed state shape would have bent the contract. It's derived from the seed constants. In production it would come from the RFQ record.
-- **Server-side validation.** `/submit` still checks only required fields. The "everything confirmed" gate is client-side, which is the next thing I'd move to the server.
+- **Server-side validation, mostly.** `/submit` still checks required fields, with one addition: the reviewer can choose to submit without lines that are missing data. After a confirmation dialog, those line ids are sent as `excludeLineIds`, skipped by validation, and recorded on the vendor as `excludedLineIds`. They're kept, not deleted. The "everything confirmed" gate is still client-side, and it's the next thing I'd move to the server.
 - **No real AI call.** The seeded values stand in for the extractor's output. The hard part of this task is the human review step, and I wanted the time there.
 - **Per-viewer preferences use localStorage** (colours, layout, toggles), because they're conveniences and shouldn't change shared data.
 - **The old `VendorProcessingForm.svelte` is left in place, unused.** I kept the diff focused on the new flow rather than spend time on cleanup.
