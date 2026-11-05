@@ -108,16 +108,25 @@ function createStore() {
 			}
 			return persist();
 		},
-		async submitVendor(vendorId: string): Promise<void> {
+		async submitVendor(vendorId: string, excludeLineIds: string[] = []): Promise<void> {
 			await this.flush();
-			const res = await fetch(`/api/quote/${vendorId}/submit`, { method: 'POST' });
+			const res = await fetch(`/api/quote/${vendorId}/submit`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ excludeLineIds })
+			});
 			if (!res.ok) {
 				const body = (await res.json().catch(() => null)) as { message?: string } | null;
 				throw new Error(body?.message ?? `submit failed: ${res.status}`);
 			}
-			const { vendor } = (await res.json()) as { vendor: { submittedAt: string } };
+			const { vendor } = (await res.json()) as {
+				vendor: { submittedAt: string; excludedLineIds?: string[] };
+			};
 			const local = state.vendors.find((v) => v.id === vendorId);
-			if (local) local.submittedAt = vendor.submittedAt;
+			if (local) {
+				local.submittedAt = vendor.submittedAt;
+				local.excludedLineIds = vendor.excludedLineIds;
+			}
 		}
 	};
 }

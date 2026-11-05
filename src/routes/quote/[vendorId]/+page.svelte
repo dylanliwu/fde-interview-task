@@ -7,6 +7,7 @@
 	import EmailCorrespondence from '$lib/components/EmailCorrespondence.svelte';
 	import QuoteReviewGrid from '$lib/components/QuoteReviewGrid.svelte';
 	import { buildReview, summarize } from '$lib/review';
+	import { LINE_FIELD_DEFS } from '$lib/fields';
 	import { layout, loadLayout, saveLayout, clampPct, EMAIL_DEFAULT } from '$lib/layout.svelte';
 
 	let { data } = $props();
@@ -21,13 +22,36 @@
 
 	let submitting = $state(false);
 	let submitError = $state<string | null>(null);
+	let confirmSkip = $state(false);
 
-	async function submit() {
+	// Lines still missing a required value: submitting asks to leave these out.
+	const incompleteLines = $derived(
+		vendor
+			? vendor.products.flatMap((p) =>
+					p.lines
+						.filter((l) =>
+							LINE_FIELD_DEFS.some(
+								(d) => d.required && (l[d.field] === null || l[d.field] === '' || l[d.field] === undefined)
+							)
+						)
+						.map((l) => ({ id: l.id, pn: p.partNumber, qty: l.quantity }))
+				)
+			: []
+	);
+
+	function submit() {
 		if (!vendor || submitting) return;
+		if (incompleteLines.length) confirmSkip = true;
+		else void doSubmit([]);
+	}
+
+	async function doSubmit(excludeLineIds: string[]) {
+		if (!vendor || submitting) return;
+		confirmSkip = false;
 		submitError = null;
 		submitting = true;
 		try {
-			await store.submitVendor(vendor.id);
+			await store.submitVendor(vendor.id, excludeLineIds);
 		} catch (err) {
 			submitError = err instanceof Error ? err.message : 'submit failed';
 		} finally {
@@ -79,6 +103,8 @@
 			} else if (e.key === 'ArrowRight' && data.nextId) {
 				e.preventDefault();
 				void goto(`/quote/${data.nextId}`);
+			} else if (e.key === 'Escape' && confirmSkip) {
+				confirmSkip = false;
 			} else if (e.key === 'Escape') {
 				void goto('/');
 			}
@@ -215,5 +241,40 @@
 		<main class="flex flex-1 items-center justify-center text-sm text-gray-500">
 			Vendor not found.
 		</main>
+	{/if}
+	{#if confirmSkip}
+		<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="presentation">
+			<div
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="skip-title"
+				class="w-full max-w-md rounded-xl border border-gray-200 bg-white p-5 shadow-2xl"
+			>
+				<h2 id="skip-title" class="text-sm font-semibold text-gray-900">
+					Submit without {incompleteLines.length} incomplete line{incompleteLines.length === 1 ? '' : 's'}?
+				</h2>
+				<p class="mt-1 text-xs leading-relaxed text-gray-600">
+					These lines are missing a required value (unit cost, price, currency or lead time). They'll be
+					left out of the submission. Nothing is deleted, and you can still fill them in later.
+				</p>
+				<ul class="mt-3 max-h-40 space-y-1 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-2 font-mono text-xs text-gray-700">
+					{#each incompleteLines as l (l.id)}
+						<li>{l.pn} · qty {l.qty}</li>
+					{/each}
+				</ul>
+				<div class="mt-4 flex justify-end gap-2">
+					<button
+						type="button"
+						class="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-800 hover:bg-gray-100"
+						onclick={() => (confirmSkip = false)}>Go back and fill in</button
+					>
+					<button
+						type="button"
+						class="rounded-md border border-gray-900 bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-50 hover:bg-gray-800"
+						onclick={() => doSubmit(incompleteLines.map((l) => l.id))}>Submit without them</button
+					>
+				</div>
+			</div>
+		</div>
 	{/if}
 </div>

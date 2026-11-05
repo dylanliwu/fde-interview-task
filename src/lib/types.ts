@@ -60,6 +60,8 @@ export type Vendor = {
 	submittedAt: string | null;
 	/** Review-row keys a human has confirmed (see review.ts). Optional: older state lacks it. */
 	reviewedRows?: string[];
+	/** Lines the reviewer chose to submit without (missing data). Kept, not deleted. Optional. */
+	excludedLineIds?: string[];
 	emails: Email[];
 	products: Product[];
 };
