@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Email } from '$lib/types';
 	import { Paperclip, ChevronDown, Mail } from '@lucide/svelte';
-	import { slide } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 	import { untrack } from 'svelte';
 	import { avatarColor, initials } from '$lib/avatar';
 	import PdfAttachment from './PdfAttachment.svelte';
@@ -12,9 +12,13 @@
 
 	let openIds = $state(new Set<string>());
 
+	const threadKey = $derived(emails.map((e) => e.id).join('|'));
 	$effect(() => {
-		const last = emails[emails.length - 1];
-		openIds = new Set(last ? [last.id] : []);
+		void threadKey;
+		untrack(() => {
+			const last = emails[emails.length - 1];
+			openIds = new Set(last ? [last.id] : []);
+		});
 	});
 
 	// Open whichever email holds the focused source match.
@@ -96,7 +100,7 @@
 
 			{#if open}
 				<div
-					transition:slide={{ duration: 180 }}
+					in:fade={{ duration: 120 }}
 					class="border-t border-gray-100 bg-gray-50/60 px-5 py-4"
 				>
 					<dl class="mb-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px]">

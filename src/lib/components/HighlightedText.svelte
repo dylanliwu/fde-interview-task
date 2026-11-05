@@ -24,10 +24,16 @@
 	$effect(() => {
 		void sourceFocus.nonce;
 		if (sourceFocus.match?.sourceId !== sourceId) return;
+		// Wait for the DOM update plus one frame so a just-opened email/PDF has its final
+		// layout before we scroll — scrolling mid-layout is what made it jump.
+		let raf = 0;
 		void tick().then(() => {
-			const target = el?.querySelector('[data-hl=line]') ?? el?.querySelector('[data-hl=block]');
-			target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+			raf = requestAnimationFrame(() => {
+				const target = el?.querySelector('[data-hl=line]') ?? el?.querySelector('[data-hl=block]');
+				target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+			});
 		});
+		return () => cancelAnimationFrame(raf);
 	});
 </script>
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { EmailAttachment } from '$lib/types';
 	import { FileText, ChevronDown } from '@lucide/svelte';
-	import { slide } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 
 	import HighlightedText from './HighlightedText.svelte';
 	import { sourceFocus } from '$lib/source.svelte';
@@ -40,7 +40,7 @@
 	</button>
 
 	{#if open}
-		<div transition:slide={{ duration: 180 }} class="space-y-3 border-t border-gray-100 bg-gray-100/50 p-3">
+		<div in:fade={{ duration: 120 }} class="space-y-3 border-t border-gray-100 bg-gray-100/50 p-3">
 			{#each attachment.pages as page, i (i)}
 				<article
 					class="overflow-hidden rounded-md border border-gray-200 bg-gray-50"
