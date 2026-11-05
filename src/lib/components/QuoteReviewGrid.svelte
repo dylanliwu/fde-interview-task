@@ -21,8 +21,31 @@
 		type Tone
 	} from '$lib/review';
 	import { findInRequest, findInVendor, focusSource } from '$lib/source.svelte';
-	import { Check, ChevronRight, Plus, Info, X, Menu, Minus, Palette, ArrowLeftRight, Trash2, Undo2 } from '@lucide/svelte';
-	import { layout, toggleSwapped } from '$lib/layout.svelte';
+	import {
+		Check,
+		ChevronRight,
+		Plus,
+		Info,
+		X,
+		Menu,
+		Minus,
+		Palette,
+		ArrowLeftRight,
+		Trash2,
+		Undo2,
+		Columns3,
+		Rows3,
+		EyeOff,
+		Crosshair,
+		ChevronsUpDown,
+		ChevronsDownUp,
+		RotateCcw,
+		Tag,
+		CornerDownLeft,
+		Contrast
+	} from '@lucide/svelte';
+	import { layout, toggleSwapped, saveLayout, EMAIL_DEFAULT } from '$lib/layout.svelte';
+	import { prefs, loadPrefs, togglePref, type Prefs } from '$lib/prefs.svelte';
 	import CompactField from './CompactField.svelte';
 
 	let { vendor }: { vendor: Vendor } = $props();
@@ -31,10 +54,8 @@
 	// isQuoting is hidden: a row only exists because the vendor quoted it, and the "Not quoted"
 	// status already covers no-bids, so the checkbox was noise. The data is kept untouched.
 	const HIDDEN_COLS = new Set<keyof Line>(['isQuoting']);
-	const LINE_COLS = LINE_FIELD_DEFS.filter((d) => d.type !== 'textarea' && !HIDDEN_COLS.has(d.field));
+	const ALL_LINE_COLS = LINE_FIELD_DEFS.filter((d) => d.type !== 'textarea' && !HIDDEN_COLS.has(d.field));
 	const LINE_NOTE_DEFS = LINE_FIELD_DEFS.filter((d) => d.type === 'textarea');
-	const QTY_IDX = LINE_COLS.findIndex((d) => d.field === 'quantity');
-	const COLSPAN = 3 + LINE_COLS.length; // ✓ + status + line fields + delete
 	const SHORT_HEADER: Partial<Record<keyof Line, string>> = {
 		isQuoting: 'Quoting',
 		quantity: 'Qty',
@@ -63,20 +84,12 @@
 	let anchorKey: string | null = null;
 	let expanded = $state(new Set<string>());
 
-	// --- colour coding toggle (per-viewer preference) ---
-	const COLOR_KEY = 'quoteReview.colors';
-	let colors = $state(true);
-	onMount(() => {
-		try {
-			colors = localStorage.getItem(COLOR_KEY) !== 'off';
-		} catch {}
-	});
-	function toggleColors() {
-		colors = !colors;
-		try {
-			localStorage.setItem(COLOR_KEY, colors ? 'on' : 'off');
-		} catch {}
-	}
+	// --- per-viewer preferences (toolbar menu) ---
+	onMount(loadPrefs);
+	const colors = $derived(prefs.colors);
+	const lineCols = $derived(prefs.optionalCols ? ALL_LINE_COLS : ALL_LINE_COLS.filter((d) => d.required));
+	const qtyIdx = $derived(lineCols.findIndex((d) => d.field === 'quantity'));
+	const colspan = $derived(3 + lineCols.length); // ✓ + status + line fields + delete
 
 	// --- toolbar menu + guide panel ---
 	let menuOpen = $state(false);
@@ -134,7 +147,9 @@
 			.join(' · ')
 	);
 
-	const visibleRows = $derived(groups.flatMap((g) => g.rows.map((r) => ({ g, r }))));
+	const shownRows = (g: ReviewGroup) =>
+		prefs.hideConfirmed ? g.rows.filter((r) => !reviewed.has(r.key)) : g.rows;
+	const visibleRows = $derived(groups.flatMap((g) => shownRows(g).map((r) => ({ g, r }))));
 
 	// --- part stock status: refetch only when the set of PNs changes, not on every edit ---
 	type PartStatus = { partNumber: string; stockStatus: 'in_stock' | 'low_stock'; lastQuoted: string };
@@ -171,6 +186,7 @@
 		selectedKey = r?.key ?? null;
 		const qty = r?.qty ?? null;
 		const pn = g.product?.partNumber || g.requested?.pn || '';
+		if (!prefs.jumpToSource) return;
 		focusSource(
 			findInVendor(vendor, pn, qty) ?? (g.requested ? findInVendor(vendor, g.requested.pn, qty) : null)
 		);
@@ -243,6 +259,17 @@
 		if (undoTimer) clearTimeout(undoTimer);
 	}
 
+	function expandAll(open: boolean) {
+		expanded = new Set(open ? groups.filter((g) => g.product).map((g) => g.key) : []);
+		menuOpen = false;
+	}
+
+	function resetWidth() {
+		layout.emailPct = EMAIL_DEFAULT;
+		saveLayout();
+		menuOpen = false;
+	}
+
 	function toggleExpand(key: string) {
 		const next = new Set(expanded);
 		if (next.has(key)) next.delete(key);
@@ -282,7 +309,7 @@
 				const key = selectedKey;
 				const wasConfirmed = reviewed.has(key);
 				toggleConfirm(key);
-				if (!wasConfirmed) move(1);
+				if (!wasConfirmed && prefs.autoAdvance) move(1);
 			} else if (e.key === 'Escape' && (menuOpen || guideOpen)) {
 				// Registered before the page's handler, so this keeps Esc from leaving the page.
 				e.stopImmediatePropagation();
@@ -304,9 +331,39 @@
 		});
 	});
 
+	const MENU_ITEM =
+		'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-gray-800 hover:bg-gray-100';
+
 	const cellInput =
 		'w-full rounded border border-transparent bg-transparent px-1.5 py-1 text-[13px] text-gray-900 tabular-nums hover:border-gray-300 focus:border-blue-500 focus:bg-gray-50 focus:outline-none';
 </script>
+
+{#snippet toggleItem(key: keyof Prefs, label: string, Icon: any, hint?: string)}
+	<button
+		type="button"
+		role="menuitemcheckbox"
+		aria-checked={prefs[key]}
+		class={MENU_ITEM}
+		onclick={() => togglePref(key)}
+	>
+		<Icon class="h-4 w-4 shrink-0 text-gray-500" />
+		<span class="min-w-0 flex-1">
+			<span class="block">{label}</span>
+			{#if hint}<span class="block text-[10px] text-gray-500">{hint}</span>{/if}
+		</span>
+		<span
+			class="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors {prefs[key]
+				? 'bg-blue-600'
+				: 'bg-gray-300'}"
+		>
+			<span
+				class="absolute h-3 w-3 rounded-full bg-gray-900 transition-transform {prefs[key]
+					? 'translate-x-3.5'
+					: 'translate-x-0.5'}"
+			></span>
+		</span>
+	</button>
+{/snippet}
 
 {#snippet pill(status: RowStatus)}
 	{@const meta = STATUS_META[status]}
@@ -461,53 +518,43 @@
 		{#if menuOpen}
 			<div
 				role="menu"
-				class="absolute right-3 top-full z-40 mt-1 w-60 overflow-hidden rounded-lg border border-gray-200 bg-white p-1 text-xs shadow-2xl shadow-black/60"
+				class="absolute right-3 top-full z-40 mt-1 max-h-[80vh] w-72 overflow-y-auto rounded-lg border border-gray-200 bg-white p-1 text-xs shadow-2xl shadow-black/60"
 			>
-				<button
-					type="button"
-					role="menuitem"
-					class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-800 hover:bg-gray-100"
-					onclick={() => {
-						toggleSwapped();
-						menuOpen = false;
-					}}
-				>
+				<p class="px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Layout</p>
+				<button type="button" role="menuitem" class={MENU_ITEM} onclick={() => { toggleSwapped(); menuOpen = false; }}>
 					<ArrowLeftRight class="h-4 w-4 text-gray-500" />
 					<span class="flex-1">Swap sides</span>
 					<span class="text-[11px] text-gray-500">{layout.swapped ? 'Table left' : 'Table right'}</span>
 				</button>
-				<div class="my-1 h-px bg-gray-200"></div>
-				<button
-					type="button"
-					role="menuitemcheckbox"
-					aria-checked={colors}
-					class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-800 hover:bg-gray-100"
-					onclick={toggleColors}
-				>
-					<Palette class="h-4 w-4 text-gray-500" />
-					<span class="flex-1">Colour coding</span>
-					<span
-						class="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors {colors
-							? 'bg-blue-600'
-							: 'bg-gray-300'}"
-					>
-						<span
-							class="absolute h-3 w-3 rounded-full bg-gray-900 transition-transform {colors
-								? 'translate-x-3.5'
-								: 'translate-x-0.5'}"
-						></span>
-					</span>
+				<button type="button" role="menuitem" class={MENU_ITEM} onclick={resetWidth}>
+					<RotateCcw class="h-4 w-4 text-gray-500" />
+					<span class="flex-1">Reset panel widths</span>
 				</button>
+				{@render toggleItem('compact', 'Compact rows', Rows3, 'Fit more rows on screen')}
+
 				<div class="my-1 h-px bg-gray-200"></div>
-				<button
-					type="button"
-					role="menuitem"
-					class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-gray-800 hover:bg-gray-100"
-					onclick={() => {
-						menuOpen = false;
-						guideOpen = true;
-					}}
-				>
+				<p class="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Table</p>
+				{@render toggleItem('colors', 'Colour coding', Palette, 'Tint rows by status')}
+				{@render toggleItem('optionalCols', 'Optional columns', Columns3, 'FAT and Variance')}
+				{@render toggleItem('partInfo', 'NSN & description', Tag, 'In each part header')}
+				{@render toggleItem('fadeConfirmed', 'Fade confirmed rows', Contrast)}
+				{@render toggleItem('hideConfirmed', 'Hide confirmed rows', EyeOff, 'Show only what is left')}
+				<button type="button" role="menuitem" class={MENU_ITEM} onclick={() => expandAll(true)}>
+					<ChevronsUpDown class="h-4 w-4 text-gray-500" />
+					<span class="flex-1">Expand all details</span>
+				</button>
+				<button type="button" role="menuitem" class={MENU_ITEM} onclick={() => expandAll(false)}>
+					<ChevronsDownUp class="h-4 w-4 text-gray-500" />
+					<span class="flex-1">Collapse all details</span>
+				</button>
+
+				<div class="my-1 h-px bg-gray-200"></div>
+				<p class="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Reviewing</p>
+				{@render toggleItem('jumpToSource', 'Jump to source on click', Crosshair, 'Highlight the email text')}
+				{@render toggleItem('autoAdvance', 'Next row after confirming', CornerDownLeft, 'When pressing Enter')}
+
+				<div class="my-1 h-px bg-gray-200"></div>
+				<button type="button" role="menuitem" class={MENU_ITEM} onclick={() => { menuOpen = false; guideOpen = true; }}>
 					<Info class="h-4 w-4 text-gray-500" />
 					<span class="flex-1">How to read this table</span>
 				</button>
@@ -618,7 +665,11 @@
 			{/if}
 		</div>
 
-		<table class="w-full border-collapse text-[13px]">
+		<table
+			class="w-full border-collapse text-[13px] {prefs.compact
+				? 'text-xs [&_input]:py-0! [&_select]:py-0! [&_td]:py-px!'
+				: ''}"
+		>
 			<thead class="sticky top-0 z-20 bg-white text-[11px] uppercase tracking-wide text-gray-500 shadow-[0_1px_0_var(--color-gray-200)]">
 				<tr>
 					<th class="w-9 px-2 py-2">
@@ -638,7 +689,7 @@
 						</button>
 					</th>
 					<th class="px-2 py-2 text-left font-semibold">Status</th>
-					{#each LINE_COLS as def (def.field)}
+					{#each lineCols as def (def.field)}
 						<th
 							class="px-1.5 py-2 font-semibold {COL_WIDTH[def.field] ?? ''} {def.type === 'checkbox'
 								? 'text-center'
@@ -654,13 +705,13 @@
 				</tr>
 			</thead>
 			{#each groups as g, gi (g.key)}
-				{@const rows = g.rows}
+				{@const rows = shownRows(g)}
 				{#if rows.length}
 					{@const stock = g.product ? partStatuses[g.product.partNumber] : undefined}
 					<tbody>
 						<!-- Part header: requested vs quoted PN, NSN, description, requested qtys -->
 						<tr class="cursor-pointer border-t-8 border-gray-50 bg-gray-100/70" onclick={() => select(g, null)}>
-							<td colspan={COLSPAN} class="px-2 py-1.5">
+							<td colspan={colspan} class="px-2 py-1.5">
 								<div class="flex items-center gap-2">
 									<span class="w-6 text-center font-mono text-[11px] text-gray-500">{g.requested ? gi + 1 : '+'}</span>
 									{#if g.kind === 'extra'}
@@ -683,9 +734,12 @@
 										>
 									{/if}
 									<span class="min-w-0 flex-1 truncate text-[11px] text-gray-500">
-										<span class="font-mono">NSN {g.product?.nsn ?? g.requested?.nsn}</span>
-										· {g.product?.description ?? g.requested?.desc}
-										{#if g.requested}· asked {g.requested.qtys.join(' / ')}{/if}
+										{#if prefs.partInfo}
+											<span class="font-mono">NSN {g.product?.nsn ?? g.requested?.nsn}</span>
+											· {g.product?.description ?? g.requested?.desc}
+											{#if g.requested}·{/if}
+										{/if}
+										{#if g.requested}asked {g.requested.qtys.join(' / ')}{/if}
 									</span>
 									{#if g.product}
 										<button
@@ -707,7 +761,7 @@
 						{#if expanded.has(g.key) && g.product}
 							{@const product = g.product}
 							<tr>
-								<td colspan={COLSPAN} class="border-b border-gray-200 bg-gray-50/60 px-4 py-2.5">
+								<td colspan={colspan} class="border-b border-gray-200 bg-gray-50/60 px-4 py-2.5">
 									<div class="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2 xl:grid-cols-3">
 										{#each PRODUCT_FIELD_DEFS as def (def.field)}
 											<CompactField
@@ -750,7 +804,7 @@
 								class="group cursor-pointer border-t border-gray-200/60 transition-colors
 									{colors ? tone.row : ''}
 									{selected ? 'outline-2 -outline-offset-2 outline-blue-500' : 'hover:bg-gray-100/60'}
-									{done && !selected ? 'opacity-50' : ''}"
+									{done && !selected && prefs.fadeConfirmed ? 'opacity-50' : ''}"
 								onclick={() => select(g, r)}
 								title={r.issues.map((i) => i.text).join('\n')}
 							>
@@ -772,7 +826,7 @@
 								<td class="px-2 py-1">{@render pill(r.status)}</td>
 								{#if line && g.product}
 									{@const pid = g.product.id}
-									{#each LINE_COLS as def (def.field)}
+									{#each lineCols as def (def.field)}
 										<td class="px-0.5 py-0.5 {COL_WIDTH[def.field] ?? ''}">{@render lineCell(def, line, pid, r, g)}</td>
 									{/each}
 									<td class="w-8 px-1 py-0.5 text-center">
@@ -790,9 +844,9 @@
 										>
 									</td>
 								{:else}
-									{#each { length: Math.max(0, QTY_IDX) } as _, i (i)}<td></td>{/each}
+									{#each { length: Math.max(0, qtyIdx) } as _, i (i)}<td></td>{/each}
 									<td class="px-2 py-1 text-right font-mono tabular-nums text-gray-900">{r.qty ?? '—'}</td>
-									<td colspan={LINE_COLS.length - QTY_IDX - 1} class="px-2 py-1 text-xs text-gray-500">
+									<td colspan={lineCols.length - qtyIdx - 1} class="px-2 py-1 text-xs text-gray-500">
 										<div class="flex items-center gap-2">
 											<span class="text-gray-400">—</span>
 											{#if r.status === 'missing_break' && g.product && r.qty !== null}
@@ -816,7 +870,7 @@
 							{#if selected && r.issues.length}
 								<tr class="text-[11px] {colors ? tone.row : ''}">
 									<td class={colors ? tone.bar : ''}></td>
-									<td colspan={COLSPAN - 1} class="px-2 pb-1.5 text-gray-700">
+									<td colspan={colspan - 1} class="px-2 pb-1.5 text-gray-700">
 										{#each r.issues as issue, i (i)}{#if i > 0}<span class="text-gray-400"> · </span>{/if}{@render issueText(issue, g)}{/each}
 									</td>
 								</tr>
