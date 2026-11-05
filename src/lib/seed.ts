@@ -7,7 +7,7 @@ type PartDef = {
 	desc: string;
 };
 
-const REQUESTED_PARTS: PartDef[] = [
+export const REQUESTED_PARTS: PartDef[] = [
 	{ pn: 'MS27039-1-08', nsn: '5305-00-984-6210', desc: 'Screw, machine, pan head' },
 	{ pn: 'NAS1149F0832P', nsn: '5310-00-167-0816', desc: 'Washer, flat, aluminum' },
 	{ pn: 'MS21042L3', nsn: '5310-00-855-1257', desc: 'Nut, self-locking, hex' },
@@ -20,7 +20,7 @@ const REQUESTED_PARTS: PartDef[] = [
 	{ pn: 'AN3-12A', nsn: '5306-00-826-2519', desc: 'Bolt, machine, hex head' }
 ];
 
-const REQUESTED_QTY_TIERS = [
+export const REQUESTED_QTY_TIERS = [
 	[100, 250, 500],
 	[50, 200],
 	[25, 100, 250, 500],
