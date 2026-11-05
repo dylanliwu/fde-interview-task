@@ -42,7 +42,7 @@
 		<div transition:slide={{ duration: 180 }} class="space-y-3 border-t border-gray-100 bg-gray-100/50 p-3">
 			{#each attachment.pages as page, i (i)}
 				<article
-					class="overflow-hidden rounded-md border border-gray-200 bg-[#fdfcf7] shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_-2px_rgba(0,0,0,0.04)]"
+					class="overflow-hidden rounded-md border border-gray-200 bg-gray-50"
 				>
 					<div
 						class="flex items-center justify-between border-b border-gray-200/70 bg-white/70 px-3 py-1.5"

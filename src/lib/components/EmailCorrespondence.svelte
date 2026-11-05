@@ -61,7 +61,7 @@
 			</button>
 		</div>
 		<textarea
-			rows="7"
+			rows="5"
 			class="block w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 font-sans text-[13px] leading-relaxed text-gray-800 shadow-sm transition-colors placeholder:text-gray-400 hover:border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
 			value={vendor.followUpDraft}
 			oninput={(e) => updateDraft(e.currentTarget.value)}

@@ -5,10 +5,94 @@
 		'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 	--font-mono:
 		'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+	/*
+	 * Dark theme via token remap: the app's light-theme utility classes (bg-white,
+	 * gray-50…900, tinted x-50/100/200 surfaces, x-700/800 text) are redefined here
+	 * so every component goes dark without rewriting class lists. 500/600 accents
+	 * are left as Tailwind's defaults.
+	 */
+	--color-white: #171a21;
+	--color-gray-50: #0e1015;
+	--color-gray-100: #1e222a;
+	--color-gray-200: #2a2f39;
+	--color-gray-300: #3b414d;
+	--color-gray-400: #6b7280;
+	--color-gray-500: #8d95a3;
+	--color-gray-600: #a6aebb;
+	--color-gray-700: #c5cbd5;
+	--color-gray-800: #dfe3e9;
+	--color-gray-900: #f3f5f8;
+	--color-amber-50: color-mix(in oklab, var(--color-amber-500) 14%, #171a21);
+	--color-amber-100: color-mix(in oklab, var(--color-amber-500) 22%, #171a21);
+	--color-amber-200: color-mix(in oklab, var(--color-amber-500) 34%, #171a21);
+	--color-amber-300: color-mix(in oklab, var(--color-amber-500) 50%, #171a21);
+	--color-amber-700: color-mix(in oklab, var(--color-amber-500) 62%, white);
+	--color-amber-800: color-mix(in oklab, var(--color-amber-500) 45%, white);
+	--color-blue-50: color-mix(in oklab, var(--color-blue-500) 14%, #171a21);
+	--color-blue-100: color-mix(in oklab, var(--color-blue-500) 22%, #171a21);
+	--color-blue-200: color-mix(in oklab, var(--color-blue-500) 34%, #171a21);
+	--color-blue-300: color-mix(in oklab, var(--color-blue-500) 50%, #171a21);
+	--color-blue-700: color-mix(in oklab, var(--color-blue-500) 62%, white);
+	--color-blue-800: color-mix(in oklab, var(--color-blue-500) 45%, white);
+	--color-emerald-50: color-mix(in oklab, var(--color-emerald-500) 14%, #171a21);
+	--color-emerald-100: color-mix(in oklab, var(--color-emerald-500) 22%, #171a21);
+	--color-emerald-200: color-mix(in oklab, var(--color-emerald-500) 34%, #171a21);
+	--color-emerald-300: color-mix(in oklab, var(--color-emerald-500) 50%, #171a21);
+	--color-emerald-700: color-mix(in oklab, var(--color-emerald-500) 62%, white);
+	--color-emerald-800: color-mix(in oklab, var(--color-emerald-500) 45%, white);
+	--color-indigo-50: color-mix(in oklab, var(--color-indigo-500) 14%, #171a21);
+	--color-indigo-100: color-mix(in oklab, var(--color-indigo-500) 22%, #171a21);
+	--color-indigo-200: color-mix(in oklab, var(--color-indigo-500) 34%, #171a21);
+	--color-indigo-300: color-mix(in oklab, var(--color-indigo-500) 50%, #171a21);
+	--color-indigo-700: color-mix(in oklab, var(--color-indigo-500) 62%, white);
+	--color-indigo-800: color-mix(in oklab, var(--color-indigo-500) 45%, white);
+	--color-purple-50: color-mix(in oklab, var(--color-purple-500) 14%, #171a21);
+	--color-purple-100: color-mix(in oklab, var(--color-purple-500) 22%, #171a21);
+	--color-purple-200: color-mix(in oklab, var(--color-purple-500) 34%, #171a21);
+	--color-purple-300: color-mix(in oklab, var(--color-purple-500) 50%, #171a21);
+	--color-purple-700: color-mix(in oklab, var(--color-purple-500) 62%, white);
+	--color-purple-800: color-mix(in oklab, var(--color-purple-500) 45%, white);
+	--color-red-50: color-mix(in oklab, var(--color-red-500) 14%, #171a21);
+	--color-red-100: color-mix(in oklab, var(--color-red-500) 22%, #171a21);
+	--color-red-200: color-mix(in oklab, var(--color-red-500) 34%, #171a21);
+	--color-red-300: color-mix(in oklab, var(--color-red-500) 50%, #171a21);
+	--color-red-700: color-mix(in oklab, var(--color-red-500) 62%, white);
+	--color-red-800: color-mix(in oklab, var(--color-red-500) 45%, white);
+	--color-rose-50: color-mix(in oklab, var(--color-rose-500) 14%, #171a21);
+	--color-rose-100: color-mix(in oklab, var(--color-rose-500) 22%, #171a21);
+	--color-rose-200: color-mix(in oklab, var(--color-rose-500) 34%, #171a21);
+	--color-rose-300: color-mix(in oklab, var(--color-rose-500) 50%, #171a21);
+	--color-rose-700: color-mix(in oklab, var(--color-rose-500) 62%, white);
+	--color-rose-800: color-mix(in oklab, var(--color-rose-500) 45%, white);
+	--color-teal-50: color-mix(in oklab, var(--color-teal-500) 14%, #171a21);
+	--color-teal-100: color-mix(in oklab, var(--color-teal-500) 22%, #171a21);
+	--color-teal-200: color-mix(in oklab, var(--color-teal-500) 34%, #171a21);
+	--color-teal-300: color-mix(in oklab, var(--color-teal-500) 50%, #171a21);
+	--color-teal-700: color-mix(in oklab, var(--color-teal-500) 62%, white);
+	--color-teal-800: color-mix(in oklab, var(--color-teal-500) 45%, white);
+	--color-violet-50: color-mix(in oklab, var(--color-violet-500) 14%, #171a21);
+	--color-violet-100: color-mix(in oklab, var(--color-violet-500) 22%, #171a21);
+	--color-violet-200: color-mix(in oklab, var(--color-violet-500) 34%, #171a21);
+	--color-violet-300: color-mix(in oklab, var(--color-violet-500) 50%, #171a21);
+	--color-violet-700: color-mix(in oklab, var(--color-violet-500) 62%, white);
+	--color-violet-800: color-mix(in oklab, var(--color-violet-500) 45%, white);
+	--color-yellow-50: color-mix(in oklab, var(--color-yellow-500) 14%, #171a21);
+	--color-yellow-100: color-mix(in oklab, var(--color-yellow-500) 22%, #171a21);
+	--color-yellow-200: color-mix(in oklab, var(--color-yellow-500) 34%, #171a21);
+	--color-yellow-300: color-mix(in oklab, var(--color-yellow-500) 50%, #171a21);
+	--color-yellow-700: color-mix(in oklab, var(--color-yellow-500) 62%, white);
+	--color-yellow-800: color-mix(in oklab, var(--color-yellow-500) 45%, white);
 }
 
 html {
 	font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+}
+
+html {
+	color-scheme: dark;
+	background: var(--color-gray-50);
+	color: var(--color-gray-800);
 }
