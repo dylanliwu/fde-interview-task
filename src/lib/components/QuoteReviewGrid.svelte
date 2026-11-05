@@ -335,7 +335,9 @@
 		'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-gray-800 hover:bg-gray-100';
 
 	const cellInput =
-		'w-full rounded border border-transparent bg-transparent px-1.5 py-1 text-[13px] text-gray-900 tabular-nums hover:border-gray-300 focus:border-blue-500 focus:bg-gray-50 focus:outline-none';
+		'w-full rounded border border-transparent bg-transparent px-1.5 py-1 text-[13px] text-gray-900 tabular-nums hover:border-gray-300 focus:border-blue-500 focus:bg-gray-50 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
+	/** Read-only text laid out exactly like a cellInput, so it lines up with editable cells. */
+	const cellText = 'block border border-transparent px-1.5 py-1 text-[13px] tabular-nums';
 </script>
 
 {#snippet toggleItem(key: keyof Prefs, label: string, Icon: any, hint?: string)}
@@ -845,7 +847,9 @@
 									</td>
 								{:else}
 									{#each { length: Math.max(0, qtyIdx) } as _, i (i)}<td></td>{/each}
-									<td class="px-2 py-1 text-right font-mono tabular-nums text-gray-900">{r.qty ?? '—'}</td>
+									<td class="px-0.5 py-0.5 {COL_WIDTH.quantity}">
+										<span class="{cellText} text-right font-mono text-gray-900">{r.qty ?? '—'}</span>
+									</td>
 									<td colspan={lineCols.length - qtyIdx - 1} class="px-2 py-1 text-xs text-gray-500">
 										<div class="flex items-center gap-2">
 											<span class="text-gray-400">—</span>
