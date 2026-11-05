@@ -7,6 +7,7 @@
 	import EmailCorrespondence from '$lib/components/EmailCorrespondence.svelte';
 	import QuoteReviewGrid from '$lib/components/QuoteReviewGrid.svelte';
 	import { buildReview, summarize } from '$lib/review';
+	import { layout, loadLayout, saveLayout, clampPct, EMAIL_DEFAULT } from '$lib/layout.svelte';
 
 	let { data } = $props();
 
@@ -43,7 +44,32 @@
 		);
 	}
 
+	// --- resizable split: drag the divider; double-click resets ---
+	let mainEl = $state<HTMLElement | null>(null);
+	let dragging = $state(false);
+
+	function startDrag(e: PointerEvent) {
+		dragging = true;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	}
+	function onDrag(e: PointerEvent) {
+		if (!dragging || !mainEl) return;
+		const rect = mainEl.getBoundingClientRect();
+		const pct = ((e.clientX - rect.left) / rect.width) * 100;
+		layout.emailPct = clampPct(layout.swapped ? 100 - pct : pct);
+	}
+	function endDrag() {
+		if (!dragging) return;
+		dragging = false;
+		saveLayout();
+	}
+	function resetSplit() {
+		layout.emailPct = EMAIL_DEFAULT;
+		saveLayout();
+	}
+
 	onMount(() => {
+		loadLayout();
 		function onKey(e: KeyboardEvent) {
 			const target = e.target as HTMLElement | null;
 			if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
@@ -154,10 +180,36 @@
 
 	{#if vendor}
 		<main
-			class="grid flex-1 grid-cols-1 gap-4 overflow-hidden p-4 lg:grid-cols-[minmax(0,5fr)_minmax(520px,7fr)]"
+			bind:this={mainEl}
+			class="flex flex-1 flex-col gap-4 overflow-hidden p-4 lg:flex-row lg:gap-0 {dragging
+				? 'cursor-col-resize select-none'
+				: ''}"
+			style="--email-w: {layout.emailPct}%"
 		>
-			<EmailCorrespondence {vendor} />
-			<QuoteReviewGrid {vendor} />
+			<div class="min-h-0 min-w-0 flex-1 lg:w-[var(--email-w)] lg:flex-none {layout.swapped ? 'lg:order-3' : 'lg:order-1'}">
+				<EmailCorrespondence {vendor} />
+			</div>
+			<div
+				role="separator"
+				aria-orientation="vertical"
+				aria-label="Resize panels (double-click to reset)"
+				title="Drag to resize · double-click to reset"
+				class="group hidden w-4 shrink-0 cursor-col-resize items-center justify-center lg:order-2 lg:flex"
+				onpointerdown={startDrag}
+				onpointermove={onDrag}
+				onpointerup={endDrag}
+				onpointercancel={endDrag}
+				ondblclick={resetSplit}
+			>
+				<div
+					class="h-12 w-1 rounded-full transition-colors {dragging
+						? 'bg-blue-500'
+						: 'bg-gray-200 group-hover:bg-gray-400'}"
+				></div>
+			</div>
+			<div class="min-h-0 min-w-0 flex-1 {layout.swapped ? 'lg:order-1' : 'lg:order-3'}">
+				<QuoteReviewGrid {vendor} />
+			</div>
 		</main>
 	{:else}
 		<main class="flex flex-1 items-center justify-center text-sm text-gray-500">
