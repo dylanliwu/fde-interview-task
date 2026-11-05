@@ -10,6 +10,7 @@
 	let open = $state(true);
 
 	$effect(() => {
+		void sourceFocus.nonce; // re-open on each new focus, but never fight a manual collapse
 		if (sourceFocus.match?.attachmentId === attachment.id) open = true;
 	});
 </script>

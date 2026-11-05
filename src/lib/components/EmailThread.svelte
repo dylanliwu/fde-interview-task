@@ -2,6 +2,7 @@
 	import type { Email } from '$lib/types';
 	import { Paperclip, ChevronDown, Mail } from '@lucide/svelte';
 	import { slide } from 'svelte/transition';
+	import { untrack } from 'svelte';
 	import { avatarColor, initials } from '$lib/avatar';
 	import PdfAttachment from './PdfAttachment.svelte';
 	import HighlightedText from './HighlightedText.svelte';
@@ -17,9 +18,14 @@
 	});
 
 	// Open whichever email holds the focused source match.
+	// Only re-run on a new focus event — not when openIds changes — so the user can still
+	// collapse an email that holds the current highlight.
 	$effect(() => {
+		void sourceFocus.nonce;
 		const id = sourceFocus.match?.emailId;
-		if (id && !openIds.has(id)) openIds = new Set([...openIds, id]);
+		untrack(() => {
+			if (id && !openIds.has(id)) openIds = new Set([...openIds, id]);
+		});
 	});
 
 	function toggle(id: string) {
